@@ -18,7 +18,7 @@ app.use(cors());
 app.use(bodyParser.json());
 
 const SHIPPING_RATES = {
-    DE: "shr_1PcpC4FSw12RJEif7Kyu14FC", // Deutschland
+    DE: "shr_1PnyAqRtlGIboCBe0toAlZz2", // Deutschland
 }
 
 // Supported countries list
