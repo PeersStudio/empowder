@@ -1,0 +1,35 @@
+{
+  "name": "empowder",
+  "version": "1.0.0",
+  "description": "",
+  "main": "index.js",
+  "scripts": {
+    "test": "echo \"Error: no test specified\" && exit 1"
+  },
+  "repository": {
+    "type": "git",
+    "url": "git+https://github.com/PeersStudio/empowder.git"
+  },
+  "keywords": [],
+  "author": "",
+  "license": "ISC",
+  "bugs": {
+    "url": "https://github.com/PeersStudio/empowder/issues"
+  },
+  "homepage": "https://github.com/PeersStudio/empowder#readme",
+  "dependencies": {
+    "axios": "^1.7.4",
+    "body-parser": "^1.20.2",
+    "cors": "^2.8.5",
+    "dotenv": "^16.4.5",
+    "express": "^4.19.2",
+    "i18n-iso-countries": "^7.11.3",
+    "stripe": "^16.7.0"
+  },
+  "devDependencies": {
+    "@types/express": "^4.17.21",
+    "@types/node": "^22.3.0",
+    "ts-node": "^10.9.2",
+    "typescript": "^5.5.4"
+  }
+}
