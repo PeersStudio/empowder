@@ -17,6 +17,10 @@ const stripe = new Stripe(
 app.use(cors());
 app.use(bodyParser.json());
 
+const SHIPPING_RATES = {
+    DE: "shr_1PcpC4FSw12RJEif7Kyu14FC", // Deutschland
+}
+
 // Supported countries list
 const STRIPE_SUPPORTED_COUNTRIES = [
   "AC",
