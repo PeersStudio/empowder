@@ -347,8 +347,8 @@ app.post("/create-checkout-session", async (req, res) => {
       payment_method_types: ["card"],
       line_items: lineItems,
       mode: mode,
-      success_url: "https://www.razeco.com/order-complete",
-      cancel_url: "https://www.razeco.com/shop",
+      success_url: "https://www.empowder.com/order-complete",
+      cancel_url: "https://www.empowder.com",
       allow_promotion_codes: true,
       shipping_address_collection: {
         allowed_countries: Object.keys(SHIPPING_RATES).filter((code) =>
