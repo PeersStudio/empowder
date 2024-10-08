@@ -8,18 +8,19 @@ const cors = require("cors");
 const app = express();
 const port = process.env.PORT || 3000;
 
-const stripe = new Stripe(
-  process.env.STRIPE_SECRET_KEY,
-  { apiVersion: "2024-06-20" }
-);
+const stripe = new Stripe(process.env.STRIPE_SECRET_KEY, {
+  apiVersion: "2024-06-20",
+});
 
 // CORS configuration
 app.use(cors());
 app.use(bodyParser.json());
 
 const SHIPPING_RATES = {
-    DE: "shr_1PnyAqRtlGIboCBe0toAlZz2", // Deutschland
-}
+  DE: "shr_1PnyAqRtlGIboCBe0toAlZz2", // Deutschland
+};
+
+const FREE_SHIPPING_RATE_ID = "shr_1Q7ehDRtlGIboCBeb7MQYoDp"; // Dummy ID für kostenlosen Versand
 
 // Supported countries list
 const STRIPE_SUPPORTED_COUNTRIES = [
@@ -280,14 +281,6 @@ app.post("/create-checkout-session", async (req, res) => {
       .json({ error: "Country and country code are required" });
   }
 
-  // Check if country code is supported
-  if (!STRIPE_SUPPORTED_COUNTRIES.includes(countryCode)) {
-    console.error(`Country code ${countryCode} is not supported`);
-    return res
-      .status(400)
-      .json({ error: `Country code ${countryCode} is not supported` });
-  }
-
   try {
     console.log("Products:", products);
     console.log("Country:", country);
@@ -302,27 +295,8 @@ app.post("/create-checkout-session", async (req, res) => {
           if (!prices.data || prices.data.length === 0) {
             throw new Error(`No prices found for product ${product.id}`);
           }
-          let priceId;
-          if (product.paymentType === "subscription") {
-            const [interval_count, interval] = product.frequency.split("_");
-            const singularInterval =
-              parseInt(interval_count) > 1 ? interval.slice(0, -1) : interval;
-            const price = prices.data.find(
-              (price) =>
-                price.recurring &&
-                price.recurring.interval === singularInterval &&
-                price.recurring.interval_count === parseInt(interval_count)
-            );
-            if (!price) {
-              throw new Error(
-                `No matching recurring price found for product ${product.id} with frequency ${product.frequency}`
-              );
-            }
-            priceId = price.id;
-          } else {
-            priceId = prices.data.find((price) => !price.recurring).id;
-          }
-          console.log(`Found price ID for product ${product.id}: ${priceId}`);
+
+          let priceId = prices.data.find((price) => !price.recurring).id;
 
           return {
             price: priceId,
@@ -338,10 +312,7 @@ app.post("/create-checkout-session", async (req, res) => {
 
     console.log("Line Items:", lineItems);
 
-    const hasSubscription = products.some(
-      (product) => product.paymentType === "subscription"
-    );
-    const mode = hasSubscription ? "subscription" : "payment";
+    let mode = "payment"; // Default to payment mode
 
     let sessionParams = {
       payment_method_types: ["card"],
@@ -355,54 +326,30 @@ app.post("/create-checkout-session", async (req, res) => {
           STRIPE_SUPPORTED_COUNTRIES.includes(code)
         ),
       },
+      shipping_options: [
+        {
+          shipping_rate: FREE_SHIPPING_RATE_ID, // Always use free shipping
+        },
+      ],
     };
 
-    if (mode === "subscription") {
-      sessionParams.subscription_data = {
-        items: lineItems
-          .filter((item) =>
-            products.find(
-              (product) =>
-                product.id === item.price &&
-                product.paymentType === "subscription"
-            )
-          )
-          .map((item) => ({
-            price: item.price,
-            quantity: item.quantity,
-          })),
-      };
-    }
+    // New Logic: Check if the starter kit is in the cart
+    const hasStarterKit = products.some(
+      (product) => product.id === "prod_QzeKZuNUPtw8sT"
+    );
 
-    if (mode === "payment") {
-      const hasFreeShippingProduct = products.some((p) =>
-        ["prod_Q3ZEOEhS6BKHPB", "prod_Q3Z7kbxV4sI41w"].includes(p.id)
-      );
-      const quantityProd1 = products
-        .filter((p) => p.id === "prod_PyP0RUcPHiIPaT")
-        .reduce((acc, p) => acc + p.quantity, 0);
-      const quantityProd2 = products
-        .filter((p) => p.id === "prod_PyOzSDkacbJWSa")
-        .reduce((acc, p) => acc + p.quantity, 0);
-      const totalQuantity = quantityProd1 + quantityProd2;
-
-      let shippingRate;
-      if (countryCode === "DE" && hasFreeShippingProduct) {
-        // Kostenloser Versand, wenn es ein Produkt mit kostenlosem Versand gibt
-        shippingRate = FREE_SHIPPING_RATE_ID;
-      } else if (countryCode === "DE" && totalQuantity >= 8) {
-        // Kostenloser Versand ab 8 Packungen nur in Deutschland
-        shippingRate = FREE_SHIPPING_RATE_ID;
-      } else {
-        // Standard-Versandrate oder länderspezifische Versandrate
-        shippingRate = SHIPPING_RATES[countryCode] || STANDARD_SHIPPING_RATE_ID;
-      }
-
-      sessionParams.shipping_options = [
-        {
-          shipping_rate: shippingRate,
+    if (hasStarterKit) {
+      // Add the subscription for the powder with a 30-day trial
+      const powderSubscriptionItem = {
+        price: "prod_QeOzW9DQaxaFNe", // Subscription price ID for the powder
+        quantity: 1,
+        subscription_data: {
+          trial_period_days: 30, // Start the subscription after 30 days
         },
-      ];
+      };
+
+      sessionParams.line_items.push(powderSubscriptionItem); // Add the subscription item
+      sessionParams.mode = "subscription"; // Set to subscription mode
     }
 
     const session = await stripe.checkout.sessions.create(sessionParams);
