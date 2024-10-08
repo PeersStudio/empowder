@@ -263,99 +263,78 @@ const STRIPE_SUPPORTED_COUNTRIES = [
   "ZZ",
 ];
 
-// Endpoint to create checkout session
 app.post("/create-checkout-session", async (req, res) => {
-  const { products, country, countryCode } = req.body;
-
-  // Validate products
-  if (!products || !Array.isArray(products)) {
-    console.error("Invalid products format");
-    return res.status(400).json({ error: "Invalid products format" });
-  }
-
-  // Validate country and countryCode
-  if (!country || !countryCode) {
-    console.error("Country and country code are required");
-    return res
-      .status(400)
-      .json({ error: "Country and country code are required" });
-  }
+  const { products, customerEmail, country, countryCode } = req.body;
 
   try {
-    console.log("Products:", products);
-    console.log("Country:", country);
-    console.log("Country Code:", countryCode);
-
     const lineItems = await Promise.all(
-      products
-        .filter((product) => product.quantity > 0)
-        .map(async (product) => {
-          console.log(`Fetching prices for product: ${product.id}`);
-          const prices = await stripe.prices.list({ product: product.id });
-          if (!prices.data || prices.data.length === 0) {
-            throw new Error(`No prices found for product ${product.id}`);
+      products.map(async (product) => {
+        console.log(`Fetching prices for product: ${product.id}`);
+        
+        // Preise für das Produkt abrufen
+        const prices = await stripe.prices.list({ product: product.id });
+
+        if (!prices.data || prices.data.length === 0) {
+          throw new Error(`No prices found for product ${product.id}`);
+        }
+
+        let priceId;
+
+        // Überprüfen, ob es sich um eine Subscription handelt
+        if (product.paymentType === "subscription") {
+          // Abonnementpreis finden basierend auf der Frequenz
+          const [interval_count, interval] = product.frequency.split("_");
+          const singularInterval = interval_count > 1 ? interval.slice(0, -1) : interval;
+          
+          const subscriptionPrice = prices.data.find((price) => 
+            price.recurring && 
+            price.recurring.interval === singularInterval && 
+            price.recurring.interval_count === parseInt(interval_count)
+          );
+
+          if (!subscriptionPrice) {
+            throw new Error(`No matching recurring price found for product ${product.id} with frequency ${product.frequency}`);
           }
 
-          let priceId = prices.data.find((price) => !price.recurring).id;
+          priceId = subscriptionPrice.id;
 
-          return {
-            price: priceId,
-            quantity: product.quantity,
-            adjustable_quantity: {
-              enabled: true,
-              minimum: 0,
-              maximum: 999,
-            },
-          };
-        })
+        } else {
+          // Einmalige Preis-ID
+          priceId = prices.data.find((price) => !price.recurring).id;
+        }
+
+        return {
+          price: priceId,
+          quantity: product.quantity,
+          adjustable_quantity: {
+            enabled: true,
+            minimum: 0,
+            maximum: 999,
+          },
+        };
+      })
     );
 
-    console.log("Line Items:", lineItems);
-
-    let mode = "payment"; // Default to payment mode
+    const mode = products.some((product) => product.paymentType === "subscription") ? "subscription" : "payment";
 
     let sessionParams = {
       payment_method_types: ["card"],
       line_items: lineItems,
       mode: mode,
-      success_url: "https://www.empowder.eu/order-complete",
-      cancel_url: "https://www.empowder.eu",
+      success_url: "https://www.yourwebsite.com/order-complete",
+      cancel_url: "https://www.yourwebsite.com/cancel",
+      customer_email: customerEmail,
       allow_promotion_codes: true,
-      shipping_address_collection: {
-        allowed_countries: Object.keys(SHIPPING_RATES).filter((code) =>
-          STRIPE_SUPPORTED_COUNTRIES.includes(code)
-        ),
-      },
-      shipping_options: [
-        {
-          shipping_rate: FREE_SHIPPING_RATE_ID, // Always use free shipping
-        },
-      ],
     };
 
-    // New Logic: Check if the starter kit is in the cart
-    const hasStarterKit = products.some(
-      (product) => product.id === "prod_QzeKZuNUPtw8sT"
-    );
-
-    if (hasStarterKit) {
-      // Add the subscription for the powder with a 30-day trial
-      const powderSubscriptionItem = {
-        price: "prod_QeOzW9DQaxaFNe", // Subscription price ID for the powder
-        quantity: 1,
-        subscription_data: {
-          trial_period_days: 30, // Start the subscription after 30 days
-        },
+    if (mode === "subscription") {
+      // Handling for subscriptions (adding trial period, etc.)
+      sessionParams.subscription_data = {
+        trial_period_days: 30, // Set a trial period if applicable
       };
-
-      sessionParams.line_items.push(powderSubscriptionItem); // Add the subscription item
-      sessionParams.mode = "subscription"; // Set to subscription mode
     }
 
     const session = await stripe.checkout.sessions.create(sessionParams);
-    console.log(session);
-
-    console.log(`Checkout session created: ${session.id}`);
     res.json({ id: session.id });
   } catch (error) {
     console.error(`Error creating checkout session: ${error.message}`);
