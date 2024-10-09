@@ -344,7 +344,7 @@ app.post("/create-checkout-session", async (req, res) => {
       };
 
       // Erstelle eine Subscription Schedule für das Pulver, das ab dem zweiten Monat startet
-      await stripe.subscriptionSchedules.create({
+      const subscriptionSchedule = await stripe.subscriptionSchedules.create({
         customer: customer.id,
         start_date: "now",
         end_behavior: "release",
@@ -360,6 +360,11 @@ app.post("/create-checkout-session", async (req, res) => {
           },
         ],
       });
+
+      // Füge die Subscription Schedule-ID zu den Checkout-Session-Parametern hinzu
+      sessionParams.subscription_data = {
+        subscription_schedule: subscriptionSchedule.id,
+      };
     } else {
       // Standard-Checkout-Logik für Einmalkäufe und Subscriptions
       const hasSubscription = products.some(
