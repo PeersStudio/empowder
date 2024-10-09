@@ -310,6 +310,10 @@ app.post("/create-checkout-session", async (req, res) => {
         };
       });
 
+    const hasSubscription = products.some(
+      (product) => product.paymentType === "subscription"
+    );
+
     let sessionParams;
     const hasStarterKit = products.some(
       (product) => product.id === "prod_QzeKZuNUPtw8sT"
