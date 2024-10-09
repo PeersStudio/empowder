@@ -21,7 +21,7 @@ app.post("/webhook", bodyParser.raw({ type: "application/json" }));
 // Verwende JSON-Parser für alle anderen Routen
 app.use(bodyParser.json());
 
-const FREE_SHIPPING_RATE_ID = "shr_1Q7weaRtlGIboCBeQzieeslb"; // Kostenloser Versand
+const FREE_SHIPPING_RATE_ID = "shr_1Q7ehDRtlGIboCBeb7MQYoDp"; // Kostenloser Versand
 
 // Preis-IDs für die Produkte
 const PRICE_MAP = {
