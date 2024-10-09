@@ -29,9 +29,9 @@ const PRICE_MAP = {
   prod_QeOzW9DQaxaFNe: "price_1Pn6BrRtlGIboCBeLcku9Xvt", // Subscription
   prod_QzwSTkTVrgHIrI: "price_1Q7wZFRtlGIboCBe3GzHk9do", // Starterkit (Einmalkauf)
   prod_QzwRUGBqnSUkMj: "price_1Q7wYxRtlGIboCBeerp8fgS8",
+  prod_Qv3UQUqtKyynIk: "price_1Q3DNjRtlGIboCBebifLX3Gk"
 };
 
-// Supported countries list
 // Supported countries list
 const STRIPE_SUPPORTED_COUNTRIES = [
   "AC",
@@ -334,7 +334,11 @@ app.post("/create-checkout-session", async (req, res) => {
             quantity: 1,
           },
         ],
-        customer_creation: "always", // Immer einen Kunden anlegen
+        customer_creation: "always",
+        billing_address_collection: "required", // Rechnungsadresse abfragen
+        shipping_address_collection: {
+          allowed_countries: STRIPE_SUPPORTED_COUNTRIES, // Versandadresse abfragen
+        },
         success_url:
           "https://www.empowder.eu/order-complete?session_id={CHECKOUT_SESSION_ID}",
         cancel_url: "https://www.empowder.eu/cancel",
@@ -356,7 +360,11 @@ app.post("/create-checkout-session", async (req, res) => {
         payment_method_types: ["card"],
         line_items: lineItems,
         mode: mode,
-        customer_creation: "always", // Immer einen Kunden anlegen
+        customer_creation: "always",
+        billing_address_collection: "required", // Rechnungsadresse abfragen
+        shipping_address_collection: {
+          allowed_countries: STRIPE_SUPPORTED_COUNTRIES, // Versandadresse abfragen
+        },
         success_url: "https://www.empowder.eu/order-complete",
         cancel_url: "https://www.empowder.eu/cancel",
         customer_email: customerEmail,
@@ -398,7 +406,7 @@ app.post("/webhook", async (req, res) => {
   if (event.type === "checkout.session.completed") {
     const session = event.data.object;
 
-    const customerId = session.customer; // Kunden-ID aus der Checkout-Session
+    const customerId = session.customer;
 
     // Erstelle die Subscription Schedule für den zweiten Monat
     try {
