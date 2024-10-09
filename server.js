@@ -270,12 +270,20 @@ app.post("/create-checkout-session", async (req, res) => {
 
     if (hasSubscriptionStarterKit) {
       // Preise für das Starterkit und Abo-Produkt abrufen
-      const starterKitPrice = (
-        await stripe.prices.list({ product: "prod_QzeKZuNUPtw8sT" })
-      ).data[0].id;
-      const subscriptionPrice = (
-        await stripe.prices.list({ product: "prod_QeOzW9DQaxaFNe" })
-      ).data[0].id;
+      const starterKitPrices = await stripe.prices.list({
+        product: "prod_QzeKZuNUPtw8sT",
+      });
+      const subscriptionPrices = await stripe.prices.list({
+        product: "prod_QeOzW9DQaxaFNe",
+      });
+
+      // Sicherstellen, dass Preise gefunden wurden
+      if (!starterKitPrices.data.length || !subscriptionPrices.data.length) {
+        throw new Error("Prices for Starterkit or Subscription not found");
+      }
+
+      const starterKitPrice = starterKitPrices.data[0].id;
+      const subscriptionPrice = subscriptionPrices.data[0].id;
 
       // Kunden erstellen
       const customer = await stripe.customers.create({ email: customerEmail });
@@ -329,6 +337,9 @@ app.post("/create-checkout-session", async (req, res) => {
       const lineItems = await Promise.all(
         products.map(async (product) => {
           const prices = await stripe.prices.list({ product: product.id });
+          if (!prices.data.length) {
+            throw new Error(`No prices found for product ${product.id}`);
+          }
           const priceId = prices.data.find((price) => !price.recurring).id;
           return {
             price: priceId,
