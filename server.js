@@ -14,7 +14,9 @@ const stripe = new Stripe(process.env.STRIPE_SECRET_KEY, {
 
 // CORS configuration
 app.use(cors());
-app.use(bodyParser.json());
+
+// Verwende raw bodyParser für den Webhook
+app.use("/webhook", bodyParser.raw({ type: "application/json" }));
 
 const FREE_SHIPPING_RATE_ID = "shr_1Q7weaRtlGIboCBeQzieeslb"; // Kostenloser Versand
 
@@ -373,61 +375,55 @@ app.post("/create-checkout-session", async (req, res) => {
 });
 
 // Webhook to handle subscription scheduling after successful payment
-app.post(
-  "/webhook",
-  bodyParser.raw({ type: "application/json" }),
-  async (req, res) => {
-    const sig = req.headers["stripe-signature"];
-    let event;
+app.post("/webhook", async (req, res) => {
+  const sig = req.headers["stripe-signature"];
+  const endpointSecret = process.env.STRIPE_ENDPOINT_SECRET;
+
+  let event;
+
+  try {
+    event = stripe.webhooks.constructEvent(req.body, sig, endpointSecret);
+  } catch (err) {
+    console.log(`Webhook Error: ${err.message}`);
+    return res.status(400).send(`Webhook Error: ${err.message}`);
+  }
+
+  if (event.type === "checkout.session.completed") {
+    const session = event.data.object;
 
     try {
-      event = stripe.webhooks.constructEvent(
-        req.body,
-        sig,
-        process.env.STRIPE_WEBHOOK_SECRET
-      );
-    } catch (err) {
-      console.error(`⚠️  Webhook signature verification failed.`, err.message);
-      return res.status(400).send(`Webhook Error: ${err.message}`);
-    }
-
-    if (event.type === "checkout.session.completed") {
-      const session = event.data.object;
-
+      // Erstelle eine Subscription Schedule, falls das Starterkit gekauft wurde
       if (session.client_reference_id) {
-        try {
-          // Erstelle eine Subscription Schedule für den Kunden
-          await stripe.subscriptionSchedules.create({
-            customer: session.customer,
-            start_date: "now",
-            end_behavior: "release",
-            phases: [
-              {
-                items: [
-                  {
-                    price: PRICE_MAP["prod_QeOzW9DQaxaFNe"],
-                    quantity: 1,
-                  },
-                ],
-                iterations: 12,
-              },
-            ],
-          });
+        await stripe.subscriptionSchedules.create({
+          customer: session.customer,
+          start_date: "now",
+          end_behavior: "release",
+          phases: [
+            {
+              items: [
+                {
+                  price: PRICE_MAP["prod_QeOzW9DQaxaFNe"],
+                  quantity: 1,
+                },
+              ],
+              iterations: 12,
+            },
+          ],
+        });
 
-          console.log(
-            `Subscription schedule created for customer: ${session.customer}`
-          );
-        } catch (error) {
-          console.error(
-            `Error creating subscription schedule: ${error.message}`
-          );
-        }
+        console.log(
+          `Subscription schedule created for customer: ${session.customer}`
+        );
       }
+      res.json({ received: true });
+    } catch (error) {
+      console.error(`Error creating subscription schedule: ${error.message}`);
+      res.status(500).send("Interner Serverfehler");
     }
-
+  } else {
     res.json({ received: true });
   }
-);
+});
 
 app.listen(port, () => {
   console.log(`Server running on port ${port}`);
