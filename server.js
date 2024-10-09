@@ -16,11 +16,8 @@ const stripe = new Stripe(process.env.STRIPE_SECRET_KEY, {
 app.use(cors());
 app.use(bodyParser.json());
 
-const SHIPPING_RATES = {
-  DE: "shr_1PnyAqRtlGIboCBe0toAlZz2", // Deutschland
-};
+const FREE_SHIPPING_RATE_ID = "shr_1Q7ehDRtlGIboCBeb7MQYoDp"; // Kostenloser Versand
 
-// Supported countries list
 const STRIPE_SUPPORTED_COUNTRIES = [
   "AC",
   "AD",
@@ -301,27 +298,16 @@ app.post("/create-checkout-session", async (req, res) => {
           if (!prices.data || prices.data.length === 0) {
             throw new Error(`No prices found for product ${product.id}`);
           }
-          let priceId;
-          if (product.paymentType === "subscription") {
-            const [interval_count, interval] = product.frequency.split("_");
-            const singularInterval =
-              parseInt(interval_count) > 1 ? interval.slice(0, -1) : interval;
-            const price = prices.data.find(
-              (price) =>
-                price.recurring &&
-                price.recurring.interval === singularInterval &&
-                price.recurring.interval_count === parseInt(interval_count)
-            );
-            if (!price) {
-              throw new Error(
-                `No matching recurring price found for product ${product.id} with frequency ${product.frequency}`
-              );
-            }
-            priceId = price.id;
-          } else {
-            priceId = prices.data.find((price) => !price.recurring).id;
+
+          // Find the price marked as "default" (active price without special conditions)
+          const priceId = prices.data.find((price) => price.active)?.id;
+          if (!priceId) {
+            throw new Error(`No active price found for product ${product.id}`);
           }
-          console.log(`Found price ID for product ${product.id}: ${priceId}`);
+
+          console.log(
+            `Selected price ID for product ${product.id}: ${priceId}`
+          );
 
           return {
             price: priceId,
@@ -349,11 +335,11 @@ app.post("/create-checkout-session", async (req, res) => {
       success_url: "https://www.empowder.eu/order-complete",
       cancel_url: "https://www.empowder.eu",
       allow_promotion_codes: true,
-      shipping_address_collection: {
-        allowed_countries: Object.keys(SHIPPING_RATES).filter((code) =>
-          STRIPE_SUPPORTED_COUNTRIES.includes(code)
-        ),
-      },
+      shipping_options: [
+        {
+          shipping_rate: FREE_SHIPPING_RATE_ID,
+        },
+      ],
     };
 
     if (mode === "subscription") {
@@ -371,37 +357,6 @@ app.post("/create-checkout-session", async (req, res) => {
             quantity: item.quantity,
           })),
       };
-    }
-
-    if (mode === "payment") {
-      const hasFreeShippingProduct = products.some((p) =>
-        ["prod_Q3ZEOEhS6BKHPB", "prod_Q3Z7kbxV4sI41w"].includes(p.id)
-      );
-      const quantityProd1 = products
-        .filter((p) => p.id === "prod_PyP0RUcPHiIPaT")
-        .reduce((acc, p) => acc + p.quantity, 0);
-      const quantityProd2 = products
-        .filter((p) => p.id === "prod_PyOzSDkacbJWSa")
-        .reduce((acc, p) => acc + p.quantity, 0);
-      const totalQuantity = quantityProd1 + quantityProd2;
-
-      let shippingRate;
-      if (countryCode === "DE" && hasFreeShippingProduct) {
-        // Kostenloser Versand, wenn es ein Produkt mit kostenlosem Versand gibt
-        shippingRate = FREE_SHIPPING_RATE_ID;
-      } else if (countryCode === "DE" && totalQuantity >= 8) {
-        // Kostenloser Versand ab 8 Packungen nur in Deutschland
-        shippingRate = FREE_SHIPPING_RATE_ID;
-      } else {
-        // Standard-Versandrate oder länderspezifische Versandrate
-        shippingRate = SHIPPING_RATES[countryCode] || STANDARD_SHIPPING_RATE_ID;
-      }
-
-      sessionParams.shipping_options = [
-        {
-          shipping_rate: shippingRate,
-        },
-      ];
     }
 
     const session = await stripe.checkout.sessions.create(sessionParams);
