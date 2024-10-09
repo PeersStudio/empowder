@@ -263,81 +263,85 @@ const STRIPE_SUPPORTED_COUNTRIES = [
   "ZZ",
 ];
 
+const stripe = require("stripe")(process.env.STRIPE_SECRET_KEY);
+
 app.post("/create-checkout-session", async (req, res) => {
-  const { products, customerEmail, country, countryCode } = req.body;
+  const { products, customerEmail } = req.body;
 
   try {
-    const lineItems = await Promise.all(
-      products.map(async (product) => {
-        console.log(`Fetching prices for product: ${product.id}`);
-        
-        // Preise für das Produkt abrufen
-        const prices = await stripe.prices.list({ product: product.id });
-
-        if (!prices.data || prices.data.length === 0) {
-          throw new Error(`No prices found for product ${product.id}`);
-        }
-
-        let priceId;
-
-        // Überprüfen, ob es sich um eine Subscription handelt
-        if (product.paymentType === "subscription") {
-          // Abonnementpreis finden basierend auf der Frequenz
-          const [interval_count, interval] = product.frequency.split("_");
-          const singularInterval = interval_count > 1 ? interval.slice(0, -1) : interval;
-          
-          const subscriptionPrice = prices.data.find((price) => 
-            price.recurring && 
-            price.recurring.interval === singularInterval && 
-            price.recurring.interval_count === parseInt(interval_count)
-          );
-
-          if (!subscriptionPrice) {
-            throw new Error(`No matching recurring price found for product ${product.id} with frequency ${product.frequency}`);
-          }
-
-          priceId = subscriptionPrice.id;
-
-        } else {
-          // Einmalige Preis-ID
-          priceId = prices.data.find((price) => !price.recurring).id;
-        }
-
-        return {
-          price: priceId,
-          quantity: product.quantity,
-          adjustable_quantity: {
-            enabled: true,
-            minimum: 0,
-            maximum: 999,
-          },
-        };
-      })
+    // Prüfen, ob das Starterkit als Subscription ausgewählt wurde
+    const hasSubscriptionStarterKit = products.some(
+      (product) => product.id === "prod_QzeKZuNUPtw8sT"
     );
 
-    const mode = products.some((product) => product.paymentType === "subscription") ? "subscription" : "payment";
+    let session;
 
-    let sessionParams = {
-      payment_method_types: ["card"],
-      line_items: lineItems,
-      mode: mode,
-      success_url: "https://www.yourwebsite.com/order-complete",
-      cancel_url: "https://www.yourwebsite.com/cancel",
-      customer_email: customerEmail,
-      allow_promotion_codes: true,
-    };
+    if (hasSubscriptionStarterKit) {
+      // Subscription Schedule erstellen
+      const subscriptionSchedule = await stripe.subscriptionSchedules.create({
+        customer: "cus_example", // Hier die Kunden-ID einfügen
+        start_date: "now",
+        end_behavior: "release",
+        phases: [
+          {
+            items: [
+              {
+                price: "price_id_of_starter_kit", // Preis-ID des Starterkits
+                quantity: 1,
+              },
+            ],
+            iterations: 1,
+          },
+          {
+            items: [
+              {
+                price: "price_id_of_powder_subscription", // Preis-ID des Pulvers
+                quantity: 1,
+              },
+            ],
+            iterations: 12,
+          },
+        ],
+      });
 
-    if (mode === "subscription") {
-      // Handling for subscriptions (adding trial period, etc.)
-      sessionParams.subscription_data = {
-        trial_period_days: 30, // Set a trial period if applicable
-      };
+      // Checkout-Session für das Subscription Schedule erstellen
+      session = await stripe.checkout.sessions.create({
+        payment_method_types: ["card"],
+        mode: "subscription",
+        line_items: [
+          {
+            price: "price_id_of_starter_kit", // Zeigt das Starterkit im Checkout an
+            quantity: 1,
+          },
+        ],
+        success_url: "https://www.yourwebsite.com/order-complete",
+        cancel_url: "https://www.yourwebsite.com/cancel",
+        customer_email: customerEmail,
+        subscription_data: {
+          subscription_schedule: subscriptionSchedule.id,
+        },
+      });
+    } else {
+      // Normaler Checkout für Einzelprodukte
+      const lineItems = products.map((product) => ({
+        price: product.priceId, // Preis-ID des Produkts
+        quantity: product.quantity,
+      }));
+
+      // Checkout-Session für Einzelprodukte erstellen
+      session = await stripe.checkout.sessions.create({
+        payment_method_types: ["card"],
+        mode: "payment",
+        line_items: lineItems,
+        success_url: "https://www.yourwebsite.com/order-complete",
+        cancel_url: "https://www.yourwebsite.com/cancel",
+        customer_email: customerEmail,
+      });
     }
 
-    const session = await stripe.checkout.sessions.create(sessionParams);
     res.json({ id: session.id });
   } catch (error) {
-    console.error(`Error creating checkout session: ${error.message}`);
+    console.error("Fehler beim Erstellen der Checkout-Session:", error.message);
     res.status(500).json({ error: error.message });
   }
 });
