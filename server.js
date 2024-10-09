@@ -294,11 +294,6 @@ app.post("/create-checkout-session", async (req, res) => {
               },
             ],
             iterations: 1, // Starterkit wird einmal versendet
-            add_invoice_items: [
-              {
-                price: FREE_SHIPPING_RATE_ID,
-              },
-            ],
           },
           {
             items: [
@@ -330,11 +325,11 @@ app.post("/create-checkout-session", async (req, res) => {
         },
       };
     } else {
-      // Alte Logik für Einzelprodukte oder nicht-Subscription-Produkte
+      // Normale Checkout-Logik für Produkte ohne Subscription
       const lineItems = await Promise.all(
         products.map(async (product) => {
-          const priceId = (await stripe.prices.list({ product: product.id }))
-            .data[0].id;
+          const prices = await stripe.prices.list({ product: product.id });
+          const priceId = prices.data.find((price) => !price.recurring).id;
           return {
             price: priceId,
             quantity: product.quantity,
@@ -349,6 +344,11 @@ app.post("/create-checkout-session", async (req, res) => {
         success_url: "https://www.empowder.eu/order-complete",
         cancel_url: "https://www.empowder.eu/cancel",
         customer_email: customerEmail,
+        shipping_options: [
+          {
+            shipping_rate: FREE_SHIPPING_RATE_ID,
+          },
+        ],
       };
     }
 
