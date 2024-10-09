@@ -16,13 +16,8 @@ const stripe = new Stripe(process.env.STRIPE_SECRET_KEY, {
 app.use(cors());
 app.use(bodyParser.json());
 
-const SHIPPING_RATES = {
-  DE: "shr_1PnyAqRtlGIboCBe0toAlZz2", // Deutschland
-};
-
 const FREE_SHIPPING_RATE_ID = "shr_1Q7ehDRtlGIboCBeb7MQYoDp"; // Dummy ID für kostenlosen Versand
 
-// Supported countries list
 const STRIPE_SUPPORTED_COUNTRIES = [
   "AC",
   "AD",
@@ -263,30 +258,39 @@ const STRIPE_SUPPORTED_COUNTRIES = [
   "ZZ",
 ];
 
-const stripe = require("stripe")(process.env.STRIPE_SECRET_KEY);
-
 app.post("/create-checkout-session", async (req, res) => {
   const { products, customerEmail } = req.body;
 
   try {
-    // Prüfen, ob das Starterkit als Subscription ausgewählt wurde
+    // Kunde erstellen
+    const customer = await stripe.customers.create({
+      email: customerEmail,
+    });
+
     const hasSubscriptionStarterKit = products.some(
       (product) => product.id === "prod_QzeKZuNUPtw8sT"
     );
 
-    let session;
-
+    let sessionParams;
     if (hasSubscriptionStarterKit) {
+      // Preise für das Starterkit und Abo-Produkt abrufen
+      const starterKitPrice = (
+        await stripe.prices.list({ product: "prod_QzeKZuNUPtw8sT" })
+      ).data[0].id;
+      const subscriptionPrice = (
+        await stripe.prices.list({ product: "prod_QeOzW9DQaxaFNe" })
+      ).data[0].id;
+
       // Subscription Schedule erstellen
       const subscriptionSchedule = await stripe.subscriptionSchedules.create({
-        customer: "cus_example", // Hier die Kunden-ID einfügen
+        customer: customer.id,
         start_date: "now",
         end_behavior: "release",
         phases: [
           {
             items: [
               {
-                price: "price_id_of_starter_kit", // Preis-ID des Starterkits
+                price: starterKitPrice,
                 quantity: 1,
               },
             ],
@@ -295,7 +299,7 @@ app.post("/create-checkout-session", async (req, res) => {
           {
             items: [
               {
-                price: "price_id_of_powder_subscription", // Preis-ID des Pulvers
+                price: subscriptionPrice,
                 quantity: 1,
               },
             ],
@@ -305,43 +309,61 @@ app.post("/create-checkout-session", async (req, res) => {
       });
 
       // Checkout-Session für das Subscription Schedule erstellen
-      session = await stripe.checkout.sessions.create({
+      sessionParams = {
         payment_method_types: ["card"],
         mode: "subscription",
         line_items: [
           {
-            price: "price_id_of_starter_kit", // Zeigt das Starterkit im Checkout an
+            price: starterKitPrice,
             quantity: 1,
           },
         ],
-        success_url: "https://www.yourwebsite.com/order-complete",
-        cancel_url: "https://www.yourwebsite.com/cancel",
+        success_url: "https://www.empowder.eu/order-complete",
+        cancel_url: "https://www.empowder.eu/cancel",
         customer_email: customerEmail,
         subscription_data: {
           subscription_schedule: subscriptionSchedule.id,
         },
-      });
+        shipping_options: [
+          {
+            shipping_rate: FREE_SHIPPING_RATE_ID,
+          },
+        ],
+      };
     } else {
       // Normaler Checkout für Einzelprodukte
-      const lineItems = products.map((product) => ({
-        price: product.priceId, // Preis-ID des Produkts
-        quantity: product.quantity,
-      }));
+      const lineItems = await Promise.all(
+        products.map(async (product) => {
+          const priceId = (await stripe.prices.list({ product: product.id }))
+            .data[0].id;
+          return {
+            price: priceId,
+            quantity: product.quantity,
+          };
+        })
+      );
 
-      // Checkout-Session für Einzelprodukte erstellen
-      session = await stripe.checkout.sessions.create({
+      sessionParams = {
         payment_method_types: ["card"],
         mode: "payment",
         line_items: lineItems,
-        success_url: "https://www.yourwebsite.com/order-complete",
-        cancel_url: "https://www.yourwebsite.com/cancel",
+        success_url: "https://www.empowder.eu/order-complete",
+        cancel_url: "https://www.empowder.eu/cancel",
         customer_email: customerEmail,
-      });
+        shipping_options: [
+          {
+            shipping_rate: FREE_SHIPPING_RATE_ID,
+          },
+        ],
+      };
     }
 
+    const session = await stripe.checkout.sessions.create(sessionParams);
     res.json({ id: session.id });
   } catch (error) {
-    console.error("Fehler beim Erstellen der Checkout-Session:", error.message);
+    console.error(
+      `Fehler beim Erstellen der Checkout-Session: ${error.message}`
+    );
     res.status(500).json({ error: error.message });
   }
 });
