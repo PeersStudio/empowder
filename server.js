@@ -317,12 +317,12 @@ app.post("/create-checkout-session", async (req, res) => {
     let sessionParams;
 
     if (hasStarterKit) {
-      // Kunden erstellen, falls nicht vorhanden
+      // Erstelle einen Kunden, falls dieser nicht existiert
       const customer = await stripe.customers.create({
         email: customerEmail,
       });
 
-      // Erstelle Checkout-Session für das Starterkit als Einmalkauf
+      // Erstelle die Checkout-Session für das Starterkit als Einmalkauf
       sessionParams = {
         payment_method_types: ["card"],
         mode: "payment",
@@ -343,10 +343,10 @@ app.post("/create-checkout-session", async (req, res) => {
         ],
       };
 
-      // Subscription Schedule für das Pulver nach dem Einmalkauf erstellen
-      const subscriptionSchedule = await stripe.subscriptionSchedules.create({
+      // Erstelle ein separiertes Subscription Schedule für das Pulver, das ab dem zweiten Monat beginnt
+      await stripe.subscriptionSchedules.create({
         customer: customer.id,
-        start_date: "now",
+        start_date: Math.floor(Date.now() / 1000) + 30 * 24 * 60 * 60, // Start in 1 Monat
         end_behavior: "release",
         phases: [
           {
@@ -356,16 +356,12 @@ app.post("/create-checkout-session", async (req, res) => {
                 quantity: 1,
               },
             ],
-            iterations: 12, // Ab dem zweiten Monat für 12 Monate
+            iterations: 12, // 12 Monate lang
           },
         ],
       });
-
-      sessionParams.subscription_data = {
-        subscription_schedule: subscriptionSchedule.id,
-      };
     } else {
-      // Standard-Checkout-Logik für Einmalkäufe und Subscriptions
+      // Standard-Checkout-Logik für Einmalkäufe und Abonnements
       const hasSubscription = products.some(
         (product) => product.paymentType === "subscription"
       );
