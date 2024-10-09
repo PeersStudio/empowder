@@ -322,46 +322,54 @@ app.post("/create-checkout-session", async (req, res) => {
         email: customerEmail,
       });
 
-      // Erstelle die Checkout-Session für das Starterkit als Einmalkauf
-      sessionParams = {
-        payment_method_types: ["card"],
-        mode: "payment",
-        line_items: [
-          {
-            price: PRICE_MAP["prod_QzeKZuNUPtw8sT"],
-            quantity: 1,
-          },
-        ],
-        success_url:
-          "https://www.empowder.eu/order-complete?session_id={CHECKOUT_SESSION_ID}",
-        cancel_url: "https://www.empowder.eu/cancel",
-        customer_email: customerEmail,
-        shipping_options: [
-          {
-            shipping_rate: FREE_SHIPPING_RATE_ID,
-          },
-        ],
-      };
-
-      // Erstelle ein separiertes Subscription Schedule für das Pulver, das ab dem zweiten Monat beginnt
-      await stripe.subscriptionSchedules.create({
+      // Erstelle ein Subscription Schedule für das Starterkit und das Pulver-Abo ab Monat 2
+      const subscriptionSchedule = await stripe.subscriptionSchedules.create({
         customer: customer.id,
-        start_date: Math.floor(Date.now() / 1000) + 30 * 24 * 60 * 60, // Start in 1 Monat
+        start_date: "now",
         end_behavior: "release",
         phases: [
           {
+            // Phase 1: Starterkit als Einmalkauf
+            items: [
+              {
+                price: PRICE_MAP["prod_QzeKZuNUPtw8sT"],
+                quantity: 1,
+              },
+            ],
+            iterations: 1, // Starterkit wird einmal geliefert
+          },
+          {
+            // Phase 2: Abo für das Pulver beginnt im zweiten Monat
             items: [
               {
                 price: PRICE_MAP["prod_QeOzW9DQaxaFNe"],
                 quantity: 1,
               },
             ],
-            iterations: 12, // 12 Monate lang
+            iterations: 12, // Pulver-Abo für 12 Monate
           },
         ],
       });
+
+      // Checkout-Session für das Subscription Schedule erstellen
+      sessionParams = {
+        payment_method_types: ["card"],
+        mode: "subscription",
+        success_url:
+          "https://www.empowder.eu/order-complete?session_id={CHECKOUT_SESSION_ID}",
+        cancel_url: "https://www.empowder.eu/cancel",
+        customer_email: customerEmail,
+        subscription_data: {
+          subscription_schedule: subscriptionSchedule.id,
+        },
+        shipping_options: [
+          {
+            shipping_rate: FREE_SHIPPING_RATE_ID,
+          },
+        ],
+      };
     } else {
-      // Standard-Checkout-Logik für Einmalkäufe und Abonnements
+      // Standard-Checkout-Logik für Einmalkäufe und Subscriptions
       const hasSubscription = products.some(
         (product) => product.paymentType === "subscription"
       );
