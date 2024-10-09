@@ -340,8 +340,8 @@ app.post("/create-checkout-session", async (req, res) => {
           allowed_countries: STRIPE_SUPPORTED_COUNTRIES, // Versandadresse abfragen
         },
         success_url:
-          "https://www.empowder.eu/order-complete?session_id={CHECKOUT_SESSION_ID}",
-        cancel_url: "https://www.empowder.eu/cancel",
+          "https://www.empowder.eu/order-complete",
+        cancel_url: "https://www.empowder.eu/",
         customer_email: customerEmail,
         shipping_options: [
           {
@@ -366,7 +366,7 @@ app.post("/create-checkout-session", async (req, res) => {
           allowed_countries: STRIPE_SUPPORTED_COUNTRIES, // Versandadresse abfragen
         },
         success_url: "https://www.empowder.eu/order-complete",
-        cancel_url: "https://www.empowder.eu/cancel",
+        cancel_url: "https://www.empowder.eu/",
         customer_email: customerEmail,
       };
 
