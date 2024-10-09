@@ -14,8 +14,9 @@ const stripe = new Stripe(process.env.STRIPE_SECRET_KEY, {
 
 // CORS configuration
 app.use(cors());
-app.use(bodyParser.json());
+app.use(bodyParser.json()); // Verwende JSON-Parser für normale Routen
 
+// Verwende raw bodyParser für den Webhook
 app.use("/webhook", bodyParser.raw({ type: "application/json" }));
 
 const FREE_SHIPPING_RATE_ID = "shr_1Q7weaRtlGIboCBeQzieeslb"; // Kostenloser Versand
@@ -392,8 +393,6 @@ app.post("/webhook", async (req, res) => {
     const session = event.data.object;
 
     if (session.client_reference_id) {
-      const subscriptionScheduleId = session.client_reference_id;
-
       try {
         // Erstelle eine Subscription Schedule für den Kunden
         await stripe.subscriptionSchedules.create({
