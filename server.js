@@ -322,6 +322,24 @@ app.post("/create-checkout-session", async (req, res) => {
         email: customerEmail,
       });
 
+      // Erstelle eine Subscription Schedule für das Pulver, das ab dem zweiten Monat startet
+      const subscriptionSchedule = await stripe.subscriptionSchedules.create({
+        customer: customer.id,
+        start_date: "now",
+        end_behavior: "release",
+        phases: [
+          {
+            items: [
+              {
+                price: PRICE_MAP["prod_QeOzW9DQaxaFNe"],
+                quantity: 1,
+              },
+            ],
+            iterations: 12, // Abo läuft 12 Monate
+          },
+        ],
+      });
+
       // Erstelle Checkout-Session für das Starterkit als Einmalkauf
       sessionParams = {
         payment_method_types: ["card"],
@@ -341,29 +359,7 @@ app.post("/create-checkout-session", async (req, res) => {
             shipping_rate: FREE_SHIPPING_RATE_ID,
           },
         ],
-      };
-
-      // Erstelle eine Subscription Schedule für das Pulver, das ab dem zweiten Monat startet
-      const subscriptionSchedule = await stripe.subscriptionSchedules.create({
-        customer: customer.id,
-        start_date: "now",
-        end_behavior: "release",
-        phases: [
-          {
-            items: [
-              {
-                price: PRICE_MAP["prod_QeOzW9DQaxaFNe"],
-                quantity: 1,
-              },
-            ],
-            iterations: 12, // Abo läuft 12 Monate
-          },
-        ],
-      });
-
-      // Füge die Subscription Schedule-ID zu den Checkout-Session-Parametern hinzu
-      sessionParams.subscription_data = {
-        subscription_schedule: subscriptionSchedule.id,
+        client_reference_id: subscriptionSchedule.id, // Speichere die Subscription Schedule ID zur späteren Verwendung
       };
     } else {
       // Standard-Checkout-Logik für Einmalkäufe und Subscriptions
