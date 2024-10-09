@@ -29,7 +29,7 @@ const PRICE_MAP = {
   prod_QeOzW9DQaxaFNe: "price_1Pn6BrRtlGIboCBeLcku9Xvt", // Subscription
   prod_QzwSTkTVrgHIrI: "price_1Q7wZFRtlGIboCBe3GzHk9do", // Starterkit (Einmalkauf)
   prod_QzwRUGBqnSUkMj: "price_1Q7wYxRtlGIboCBeerp8fgS8",
-  prod_Qv3UQUqtKyynIk: "price_1Q3DNjRtlGIboCBebifLX3Gk"
+  prod_Qv3UQUqtKyynIk: "price_1Q7zTDRtlGIboCBedcBWpnbO"
 };
 
 // Supported countries list
