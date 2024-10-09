@@ -410,7 +410,7 @@ app.post("/webhook", async (req, res) => {
           {
             items: [
               {
-                price: PRICE_MAP["prod_QeOzW9DQaxaFNe"],
+                price: PRICE_MAP["prod_QzwRUGBqnSUkMj"],
                 quantity: 1,
               },
             ],
