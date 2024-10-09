@@ -366,8 +366,22 @@ app.post("/create-checkout-session", async (req, res) => {
           },
         ],
       };
+    } else if (hasSubscription) {
+      // Subscription-Mode, wenn ein Produkt mit Subscription ausgewählt wurde
+      sessionParams = {
+        payment_method_types: ["card"],
+        mode: "subscription",
+        line_items: lineItems,
+        success_url: "https://www.empowder.eu/order-complete",
+        cancel_url: "https://www.empowder.eu/cancel",
+        shipping_options: [
+          {
+            shipping_rate: FREE_SHIPPING_RATE_ID,
+          },
+        ],
+      };
     } else {
-      // Standard-Checkout-Logik
+      // Standard-Checkout-Logik für Einmalkäufe
       sessionParams = {
         payment_method_types: ["card"],
         mode: "payment",
