@@ -18,6 +18,10 @@ app.use(bodyParser.json());
 
 const FREE_SHIPPING_RATE_ID = "shr_1Q7ehDRtlGIboCBeb7MQYoDp"; // Kostenloser Versand
 
+const SHIPPING_RATES = {
+  DE: "shr_1PnyAqRtlGIboCBe0toAlZz2", // Deutschland
+};
+
 const STRIPE_SUPPORTED_COUNTRIES = [
   "AC",
   "AD",
@@ -258,10 +262,37 @@ const STRIPE_SUPPORTED_COUNTRIES = [
   "ZZ",
 ];
 
+// Endpoint to create checkout session
 app.post("/create-checkout-session", async (req, res) => {
-  const { products, customerEmail, countryCode } = req.body;
+  const { products, country, countryCode, customerEmail } = req.body;
+
+  // Validate products
+  if (!products || !Array.isArray(products)) {
+    console.error("Invalid products format");
+    return res.status(400).json({ error: "Invalid products format" });
+  }
+
+  // Validate country and countryCode
+  if (!country || !countryCode) {
+    console.error("Country and country code are required");
+    return res
+      .status(400)
+      .json({ error: "Country and country code are required" });
+  }
+
+  // Check if country code is supported
+  if (!STRIPE_SUPPORTED_COUNTRIES.includes(countryCode)) {
+    console.error(`Country code ${countryCode} is not supported`);
+    return res
+      .status(400)
+      .json({ error: `Country code ${countryCode} is not supported` });
+  }
 
   try {
+    console.log("Products:", products);
+    console.log("Country:", country);
+    console.log("Country Code:", countryCode);
+
     const hasSubscriptionStarterKit = products.some(
       (product) => product.id === "prod_QzeKZuNUPtw8sT"
     );
@@ -344,6 +375,11 @@ app.post("/create-checkout-session", async (req, res) => {
           return {
             price: priceId,
             quantity: product.quantity,
+            adjustable_quantity: {
+              enabled: true,
+              minimum: 0,
+              maximum: 999,
+            },
           };
         })
       );
