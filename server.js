@@ -16,6 +16,8 @@ const stripe = new Stripe(process.env.STRIPE_SECRET_KEY, {
 app.use(cors());
 app.use(bodyParser.json());
 
+app.use("/webhook", bodyParser.raw({ type: "application/json" }));
+
 const FREE_SHIPPING_RATE_ID = "shr_1Q7weaRtlGIboCBeQzieeslb"; // Kostenloser Versand
 
 // Supported countries list
