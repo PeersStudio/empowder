@@ -264,6 +264,8 @@ const PRICE_MAP = {
   prod_QfIkk0NfzHXl3Y: "price_1Pny90RtlGIboCBei4ShyS5V", // Einmalkauf
   prod_QeOzW9DQaxaFNe: "price_1Pn6BrRtlGIboCBeLcku9Xvt", // Subscription
   prod_QzeKZuNUPtw8sT: "price_1Q7f1rRtlGIboCBetnmYE1mG", // Starterkit (Einmalkauf)
+  prod_QzwRUGBqnSUkMj: "price_1Q7wYxRtlGIboCBeerp8fgS8", // Weitere Preise
+  prod_QzwSTkTVrgHIrI: "price_1Q7wZFRtlGIboCBe3GzHk9do", // Weitere Preise
 };
 
 // Endpoint to create checkout session
@@ -399,7 +401,7 @@ app.post("/webhook", express.raw({ type: "application/json" }), (req, res) => {
     if (session.client_reference_id) {
       const customerId = session.client_reference_id;
 
-      // Erstelle eine Subscription Schedule für den Kunden
+      // Erstelle eine Subscription Schedule für das Pulver, das ab dem zweiten Monat startet
       stripe.subscriptionSchedules
         .create({
           customer: customerId,
@@ -409,7 +411,7 @@ app.post("/webhook", express.raw({ type: "application/json" }), (req, res) => {
             {
               items: [
                 {
-                  price: PRICE_MAP["prod_QeOzW9DQaxaFNe"], // Preis für das Abonnement
+                  price: PRICE_MAP["prod_QeOzW9DQaxaFNe"], // Preis für die Subscription
                   quantity: 1,
                 },
               ],
