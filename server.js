@@ -313,78 +313,24 @@ app.post("/create-checkout-session", async (req, res) => {
       });
 
     const hasStarterKit = products.some(
-      (product) => product.id === "prod_QzwSTkTVrgHIrI"
+      (product) => product.id === "prod_QzeKZuNUPtw8sT"
     );
 
-    let sessionParams;
+    let sessionParams = {
+      payment_method_types: ["card"],
+      line_items: lineItems,
+      mode: hasStarterKit ? "payment" : "subscription",
+      success_url: "https://www.empowder.eu/order-complete",
+      cancel_url: "https://www.empowder.eu/cancel",
+      customer_email: customerEmail,
+    };
 
     if (hasStarterKit) {
-      // Erstelle einen Kunden
-      const customer = await stripe.customers.create({
-        email: customerEmail,
-      });
-
-      // Erstelle eine Subscription Schedule für das Pulver, das ab dem zweiten Monat startet
-      const subscriptionSchedule = await stripe.subscriptionSchedules.create({
-        customer: customer.id,
-        start_date: "now",
-        end_behavior: "release",
-        phases: [
-          {
-            items: [
-              {
-                price: PRICE_MAP["prod_QzwRUGBqnSUkMj"],
-                quantity: 1,
-              },
-            ],
-            iterations: 12, // Abo läuft 12 Monate
-          },
-        ],
-      });
-
-      // Erstelle Checkout-Session für das Starterkit als Einmalkauf
-      sessionParams = {
-        payment_method_types: ["card"],
-        mode: "payment",
-        line_items: [
-          {
-            price: PRICE_MAP["prod_QzwSTkTVrgHIrI"],
-            quantity: 1,
-          },
-        ],
-        success_url: "https://www.empowder.eu/order-complete",
-        cancel_url: "https://www.empowder.eu/cancel",
-        customer_email: customerEmail,
-        shipping_options: [
-          {
-            shipping_rate: FREE_SHIPPING_RATE_ID,
-          },
-        ],
-        client_reference_id: subscriptionSchedule.id, // Speichere die Subscription Schedule ID zur späteren Verwendung
-      };
-    } else {
-      // Standard-Checkout-Logik für Einmalkäufe und Subscriptions
-      const hasSubscription = products.some(
-        (product) => product.paymentType === "subscription"
-      );
-      const mode = hasSubscription ? "subscription" : "payment";
-
-      sessionParams = {
-        payment_method_types: ["card"],
-        line_items: lineItems,
-        mode: mode,
-        success_url: "https://www.empowder.eu/order-complete",
-        cancel_url: "https://www.empowder.eu/cancel",
-        customer_email: customerEmail,
-      };
-
-      if (mode === "payment") {
-        sessionParams.shipping_options = [
-          {
-            shipping_rate: FREE_SHIPPING_RATE_ID,
-          },
-        ];
-      }
+      sessionParams.shipping_options = [
+        {
+          shipping_rate: FREE_SHIPPING_RATE_ID,
+        },
+      ];
     }
 
     const session = await stripe.checkout.sessions.create(sessionParams);
@@ -394,6 +340,67 @@ app.post("/create-checkout-session", async (req, res) => {
     console.error(`Error creating checkout session: ${error.message}`);
     res.status(500).json({ error: error.message });
   }
+});
+
+// Webhook für `checkout.session.completed`
+const endpointSecret = process.env.STRIPE_WEBHOOK_SECRET;
+
+app.post("/webhook", express.raw({ type: "application/json" }), (req, res) => {
+  const sig = req.headers["stripe-signature"];
+
+  let event;
+
+  try {
+    event = stripe.webhooks.constructEvent(req.body, sig, endpointSecret);
+  } catch (err) {
+    console.error(`Webhook signature verification failed: ${err.message}`);
+    return res.status(400).send(`Webhook Error: ${err.message}`);
+  }
+
+  if (event.type === "checkout.session.completed") {
+    const session = event.data.object;
+
+    // Überprüfe, ob die Session ein Starterkit enthält
+    if (
+      session.line_items &&
+      session.line_items.data.some(
+        (item) => item.price.product === "prod_QzeKZuNUPtw8sT"
+      )
+    ) {
+      const customerId = session.customer;
+
+      // Erstelle eine Subscription Schedule für das Pulver, das ab dem zweiten Monat startet
+      stripe.subscriptionSchedules
+        .create({
+          customer: customerId,
+          start_date: "now",
+          end_behavior: "release",
+          phases: [
+            {
+              items: [
+                {
+                  price: PRICE_MAP["prod_QeOzW9DQaxaFNe"], // Preis für die Subscription
+                  quantity: 1,
+                },
+              ],
+              iterations: 12, // Laufzeit des Abonnements
+            },
+          ],
+        })
+        .then((schedule) => {
+          console.log(
+            `Subscription schedule created for customer ${customerId}: ${schedule.id}`
+          );
+        })
+        .catch((error) => {
+          console.error(
+            `Error creating subscription schedule: ${error.message}`
+          );
+        });
+    }
+  }
+
+  res.json({ received: true });
 });
 
 app.listen(port, () => {
