@@ -317,57 +317,49 @@ app.post("/create-checkout-session", async (req, res) => {
     let sessionParams;
 
     if (hasStarterKit) {
-      // Erstelle einen Kunden, falls dieser nicht existiert
+      // Erstelle einen Kunden
       const customer = await stripe.customers.create({
         email: customerEmail,
       });
 
-      // Erstelle ein Subscription Schedule für das Starterkit und das Pulver-Abo ab Monat 2
-      const subscriptionSchedule = await stripe.subscriptionSchedules.create({
-        customer: customer.id,
-        start_date: "now",
-        end_behavior: "release",
-        phases: [
-          {
-            // Phase 1: Starterkit als Einmalkauf
-            items: [
-              {
-                price: PRICE_MAP["prod_QzeKZuNUPtw8sT"],
-                quantity: 1,
-              },
-            ],
-            iterations: 1, // Starterkit wird einmal geliefert
-          },
-          {
-            // Phase 2: Abo für das Pulver beginnt im zweiten Monat
-            items: [
-              {
-                price: PRICE_MAP["prod_QeOzW9DQaxaFNe"],
-                quantity: 1,
-              },
-            ],
-            iterations: 12, // Pulver-Abo für 12 Monate
-          },
-        ],
-      });
-
-      // Checkout-Session für das Subscription Schedule erstellen
+      // Erstelle Checkout-Session für das Starterkit als Einmalkauf
       sessionParams = {
         payment_method_types: ["card"],
-        mode: "subscription",
+        mode: "payment",
+        line_items: [
+          {
+            price: PRICE_MAP["prod_QzeKZuNUPtw8sT"],
+            quantity: 1,
+          },
+        ],
         success_url:
           "https://www.empowder.eu/order-complete?session_id={CHECKOUT_SESSION_ID}",
         cancel_url: "https://www.empowder.eu/cancel",
         customer_email: customerEmail,
-        subscription_data: {
-          subscription_schedule: subscriptionSchedule.id,
-        },
         shipping_options: [
           {
             shipping_rate: FREE_SHIPPING_RATE_ID,
           },
         ],
       };
+
+      // Erstelle eine Subscription Schedule für das Pulver, das ab dem zweiten Monat startet
+      await stripe.subscriptionSchedules.create({
+        customer: customer.id,
+        start_date: "now",
+        end_behavior: "release",
+        phases: [
+          {
+            items: [
+              {
+                price: PRICE_MAP["prod_QeOzW9DQaxaFNe"],
+                quantity: 1,
+              },
+            ],
+            iterations: 12, // Abo läuft 12 Monate
+          },
+        ],
+      });
     } else {
       // Standard-Checkout-Logik für Einmalkäufe und Subscriptions
       const hasSubscription = products.some(
