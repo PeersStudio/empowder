@@ -317,7 +317,7 @@ app.post("/create-checkout-session", async (req, res) => {
     let sessionParams;
 
     if (hasStarterKit) {
-      // Kunden erstellen
+      // Kunden erstellen, falls nicht vorhanden
       const customer = await stripe.customers.create({
         email: customerEmail,
       });
@@ -336,6 +336,11 @@ app.post("/create-checkout-session", async (req, res) => {
           "https://www.empowder.eu/order-complete?session_id={CHECKOUT_SESSION_ID}",
         cancel_url: "https://www.empowder.eu/cancel",
         customer_email: customerEmail,
+        shipping_options: [
+          {
+            shipping_rate: FREE_SHIPPING_RATE_ID,
+          },
+        ],
       };
 
       // Subscription Schedule für das Pulver nach dem Einmalkauf erstellen
@@ -356,7 +361,6 @@ app.post("/create-checkout-session", async (req, res) => {
         ],
       });
 
-      // Füge das Subscription Schedule zur Checkout-Session hinzu
       sessionParams.subscription_data = {
         subscription_schedule: subscriptionSchedule.id,
       };
@@ -379,7 +383,7 @@ app.post("/create-checkout-session", async (req, res) => {
       if (mode === "payment") {
         sessionParams.shipping_options = [
           {
-            shipping_rate: SHIPPING_RATES.DE,
+            shipping_rate: FREE_SHIPPING_RATE_ID,
           },
         ];
       }
