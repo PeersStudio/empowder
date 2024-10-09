@@ -18,6 +18,7 @@ app.use(bodyParser.json());
 
 const FREE_SHIPPING_RATE_ID = "shr_1Q7ehDRtlGIboCBeb7MQYoDp"; // Kostenloser Versand
 
+// Supported countries list
 const STRIPE_SUPPORTED_COUNTRIES = [
   "AC",
   "AD",
@@ -258,6 +259,13 @@ const STRIPE_SUPPORTED_COUNTRIES = [
   "ZZ",
 ];
 
+// Preis-IDs für die Produkte
+const PRICE_MAP = {
+  prod_QfIkk0NfzHXl3Y: "price_1Pny90RtlGIboCBei4ShyS5V", // Einmalkauf
+  prod_QeOzW9DQaxaFNe: "price_1Pn6BrRtlGIboCBeLcku9Xvt", // Subscription
+  prod_QzeKZuNUPtw8sT: "price_1Q7f1rRtlGIboCBetnmYE1mG", // Starterkit (Einmalkauf)
+};
+
 // Endpoint to create checkout session
 app.post("/create-checkout-session", async (req, res) => {
   const { products, country, countryCode } = req.body;
@@ -289,79 +297,92 @@ app.post("/create-checkout-session", async (req, res) => {
     console.log("Country:", country);
     console.log("Country Code:", countryCode);
 
-    const lineItems = await Promise.all(
-      products
-        .filter((product) => product.quantity > 0)
-        .map(async (product) => {
-          console.log(`Fetching prices for product: ${product.id}`);
-          const prices = await stripe.prices.list({ product: product.id });
-          if (!prices.data || prices.data.length === 0) {
-            throw new Error(`No prices found for product ${product.id}`);
-          }
+    const lineItems = products
+      .filter((product) => product.quantity > 0)
+      .map((product) => {
+        const priceId = PRICE_MAP[product.id];
+        if (!priceId) {
+          throw new Error(`No price found for product ${product.id}`);
+        }
+        return {
+          price: priceId,
+          quantity: product.quantity,
+        };
+      });
 
-          // Find the price marked as "default" (active price without special conditions)
-          const priceId = prices.data.find((price) => price.active)?.id;
-          if (!priceId) {
-            throw new Error(`No active price found for product ${product.id}`);
-          }
-
-          console.log(
-            `Selected price ID for product ${product.id}: ${priceId}`
-          );
-
-          return {
-            price: priceId,
-            quantity: product.quantity,
-            adjustable_quantity: {
-              enabled: true,
-              minimum: 0,
-              maximum: 999,
-            },
-          };
-        })
+    let sessionParams;
+    const hasStarterKit = products.some(
+      (product) => product.id === "prod_QzeKZuNUPtw8sT"
     );
 
-    console.log("Line Items:", lineItems);
+    if (hasStarterKit) {
+      // Starterkit-Logik: Subscription Schedule erstellen
+      const customer = await stripe.customers.create();
 
-    const hasSubscription = products.some(
-      (product) => product.paymentType === "subscription"
-    );
-    const mode = hasSubscription ? "subscription" : "payment";
+      const subscriptionSchedule = await stripe.subscriptionSchedules.create({
+        customer: customer.id,
+        start_date: "now",
+        end_behavior: "release",
+        phases: [
+          {
+            items: [
+              {
+                price: PRICE_MAP["prod_QzeKZuNUPtw8sT"],
+                quantity: 1,
+              },
+            ],
+            iterations: 1, // Starterkit wird im ersten Monat geliefert
+          },
+          {
+            items: [
+              {
+                price: PRICE_MAP["prod_QeOzW9DQaxaFNe"],
+                quantity: 1,
+              },
+            ],
+            iterations: 12, // Pulver-Abo ab dem zweiten Monat für 12 Monate
+          },
+        ],
+      });
 
-    let sessionParams = {
-      payment_method_types: ["card"],
-      line_items: lineItems,
-      mode: mode,
-      success_url: "https://www.empowder.eu/order-complete",
-      cancel_url: "https://www.empowder.eu",
-      allow_promotion_codes: true,
-      shipping_options: [
-        {
-          shipping_rate: FREE_SHIPPING_RATE_ID,
+      sessionParams = {
+        payment_method_types: ["card"],
+        mode: "subscription",
+        line_items: [
+          {
+            price: PRICE_MAP["prod_QzeKZuNUPtw8sT"],
+            quantity: 1,
+          },
+        ],
+        customer_email: req.body.customerEmail,
+        subscription_data: {
+          subscription_schedule: subscriptionSchedule.id,
         },
-      ],
-    };
-
-    if (mode === "subscription") {
-      sessionParams.subscription_data = {
-        items: lineItems
-          .filter((item) =>
-            products.find(
-              (product) =>
-                product.id === item.price &&
-                product.paymentType === "subscription"
-            )
-          )
-          .map((item) => ({
-            price: item.price,
-            quantity: item.quantity,
-          })),
+        success_url: "https://www.empowder.eu/order-complete",
+        cancel_url: "https://www.empowder.eu/cancel",
+        shipping_options: [
+          {
+            shipping_rate: FREE_SHIPPING_RATE_ID,
+          },
+        ],
+      };
+    } else {
+      // Standard-Checkout-Logik
+      sessionParams = {
+        payment_method_types: ["card"],
+        mode: "payment",
+        line_items: lineItems,
+        success_url: "https://www.empowder.eu/order-complete",
+        cancel_url: "https://www.empowder.eu/cancel",
+        shipping_options: [
+          {
+            shipping_rate: FREE_SHIPPING_RATE_ID,
+          },
+        ],
       };
     }
 
     const session = await stripe.checkout.sessions.create(sessionParams);
-    console.log(session);
-
     console.log(`Checkout session created: ${session.id}`);
     res.json({ id: session.id });
   } catch (error) {
