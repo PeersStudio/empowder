@@ -32,6 +32,7 @@ const PRICE_MAP = {
 };
 
 // Supported countries list
+// Supported countries list
 const STRIPE_SUPPORTED_COUNTRIES = [
   "AC",
   "AD",
@@ -333,6 +334,7 @@ app.post("/create-checkout-session", async (req, res) => {
             quantity: 1,
           },
         ],
+        customer_creation: "always", // Immer einen Kunden anlegen
         success_url:
           "https://www.empowder.eu/order-complete?session_id={CHECKOUT_SESSION_ID}",
         cancel_url: "https://www.empowder.eu/cancel",
@@ -354,6 +356,7 @@ app.post("/create-checkout-session", async (req, res) => {
         payment_method_types: ["card"],
         line_items: lineItems,
         mode: mode,
+        customer_creation: "always", // Immer einen Kunden anlegen
         success_url: "https://www.empowder.eu/order-complete",
         cancel_url: "https://www.empowder.eu/cancel",
         customer_email: customerEmail,
@@ -395,32 +398,30 @@ app.post("/webhook", async (req, res) => {
   if (event.type === "checkout.session.completed") {
     const session = event.data.object;
 
-    if (session.client_reference_id) {
-      try {
-        // Erstelle eine Subscription Schedule für den Kunden
-        await stripe.subscriptionSchedules.create({
-          customer: session.customer,
-          start_date: "now",
-          end_behavior: "release",
-          phases: [
-            {
-              items: [
-                {
-                  price: PRICE_MAP["prod_QeOzW9DQaxaFNe"],
-                  quantity: 1,
-                },
-              ],
-              iterations: 12,
-            },
-          ],
-        });
+    const customerId = session.customer; // Kunden-ID aus der Checkout-Session
 
-        console.log(
-          `Subscription schedule created for customer: ${session.customer}`
-        );
-      } catch (error) {
-        console.error(`Error creating subscription schedule: ${error.message}`);
-      }
+    // Erstelle die Subscription Schedule für den zweiten Monat
+    try {
+      await stripe.subscriptionSchedules.create({
+        customer: customerId,
+        start_date: "now",
+        end_behavior: "release",
+        phases: [
+          {
+            items: [
+              {
+                price: PRICE_MAP["prod_QeOzW9DQaxaFNe"],
+                quantity: 1,
+              },
+            ],
+            iterations: 12,
+          },
+        ],
+      });
+
+      console.log(`Subscription schedule created for customer: ${customerId}`);
+    } catch (error) {
+      console.error(`Error creating subscription schedule: ${error.message}`);
     }
   }
 
