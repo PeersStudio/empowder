@@ -268,7 +268,7 @@ const PRICE_MAP = {
 
 // Endpoint to create checkout session
 app.post("/create-checkout-session", async (req, res) => {
-  const { products, country, countryCode } = req.body;
+  const { products, country, countryCode, customerEmail } = req.body;
 
   // Validate products
   if (!products || !Array.isArray(products)) {
@@ -310,33 +310,39 @@ app.post("/create-checkout-session", async (req, res) => {
         };
       });
 
-    const hasSubscription = products.some(
-      (product) => product.paymentType === "subscription"
-    );
-
-    let sessionParams;
     const hasStarterKit = products.some(
       (product) => product.id === "prod_QzeKZuNUPtw8sT"
     );
 
-    if (hasStarterKit) {
-      // Starterkit-Logik: Subscription Schedule erstellen
-      const customer = await stripe.customers.create();
+    let sessionParams;
 
+    if (hasStarterKit) {
+      // Erstelle Checkout-Session für das Starterkit als Einmalkauf
+      sessionParams = {
+        payment_method_types: ["card"],
+        mode: "payment",
+        line_items: [
+          {
+            price: PRICE_MAP["prod_QzeKZuNUPtw8sT"],
+            quantity: 1,
+          },
+        ],
+        success_url:
+          "https://www.empowder.eu/order-complete?session_id={CHECKOUT_SESSION_ID}",
+        cancel_url: "https://www.empowder.eu/cancel",
+        customer_email: customerEmail,
+        shipping_options: [
+          {
+            shipping_rate: FREE_SHIPPING_RATE_ID,
+          },
+        ],
+      };
+
+      // Nach dem Einmalkauf ein Subscription Schedule für das Pulver erstellen
       const subscriptionSchedule = await stripe.subscriptionSchedules.create({
-        customer: customer.id,
         start_date: "now",
         end_behavior: "release",
         phases: [
-          {
-            items: [
-              {
-                price: PRICE_MAP["prod_QzeKZuNUPtw8sT"],
-                quantity: 1,
-              },
-            ],
-            iterations: 1, // Starterkit wird im ersten Monat geliefert
-          },
           {
             items: [
               {
@@ -344,50 +350,37 @@ app.post("/create-checkout-session", async (req, res) => {
                 quantity: 1,
               },
             ],
-            iterations: 12, // Pulver-Abo ab dem zweiten Monat für 12 Monate
+            iterations: 12, // Ab dem zweiten Monat für 12 Monate
           },
         ],
       });
 
-      sessionParams = {
-        payment_method_types: ["card"],
-        mode: "subscription",
-        line_items: [
-          {
-            price: PRICE_MAP["prod_QzeKZuNUPtw8sT"],
-            quantity: 1,
-          },
-        ],
-        customer_email: req.body.customerEmail,
-        subscription_data: {
-          subscription_schedule: subscriptionSchedule.id,
-        },
-        success_url: "https://www.empowder.eu/order-complete",
-        cancel_url: "https://www.empowder.eu/cancel",
-      };
-    } else if (hasSubscription) {
-      // Subscription-Mode, wenn ein Produkt mit Subscription ausgewählt wurde
-      sessionParams = {
-        payment_method_types: ["card"],
-        mode: "subscription",
-        line_items: lineItems,
-        success_url: "https://www.empowder.eu/order-complete",
-        cancel_url: "https://www.empowder.eu/cancel",
+      sessionParams.subscription_data = {
+        subscription_schedule: subscriptionSchedule.id,
       };
     } else {
-      // Standard-Checkout-Logik für Einmalkäufe
+      // Standard-Checkout-Logik für Einmalkäufe und Subscriptions
+      const hasSubscription = products.some(
+        (product) => product.paymentType === "subscription"
+      );
+      const mode = hasSubscription ? "subscription" : "payment";
+
       sessionParams = {
         payment_method_types: ["card"],
-        mode: "payment",
         line_items: lineItems,
+        mode: mode,
         success_url: "https://www.empowder.eu/order-complete",
         cancel_url: "https://www.empowder.eu/cancel",
-        shipping_options: [
+        customer_email: customerEmail,
+      };
+
+      if (mode === "payment") {
+        sessionParams.shipping_options = [
           {
             shipping_rate: FREE_SHIPPING_RATE_ID,
           },
-        ],
-      };
+        ];
+      }
     }
 
     const session = await stripe.checkout.sessions.create(sessionParams);
