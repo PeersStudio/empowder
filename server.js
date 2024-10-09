@@ -264,6 +264,8 @@ const PRICE_MAP = {
   prod_QfIkk0NfzHXl3Y: "price_1Pny90RtlGIboCBei4ShyS5V", // Einmalkauf
   prod_QeOzW9DQaxaFNe: "price_1Pn6BrRtlGIboCBeLcku9Xvt", // Subscription
   prod_QzeKZuNUPtw8sT: "price_1Q7f1rRtlGIboCBetnmYE1mG", // Starterkit (Einmalkauf)
+  prod_QzwRUGBqnSUkMj: "price_1Q7wYxRtlGIboCBeerp8fgS8",
+  prod_QzwSTkTVrgHIrI: "price_1Q7wZFRtlGIboCBe3GzHk9do"
 };
 
 // Endpoint to create checkout session
@@ -311,7 +313,7 @@ app.post("/create-checkout-session", async (req, res) => {
       });
 
     const hasStarterKit = products.some(
-      (product) => product.id === "prod_QzeKZuNUPtw8sT"
+      (product) => product.id === "prod_QzwSTkTVrgHIrI"
     );
 
     let sessionParams;
@@ -331,7 +333,7 @@ app.post("/create-checkout-session", async (req, res) => {
           {
             items: [
               {
-                price: PRICE_MAP["prod_QeOzW9DQaxaFNe"],
+                price: PRICE_MAP["prod_QzwRUGBqnSUkMj"],
                 quantity: 1,
               },
             ],
@@ -346,7 +348,7 @@ app.post("/create-checkout-session", async (req, res) => {
         mode: "payment",
         line_items: [
           {
-            price: PRICE_MAP["prod_QzeKZuNUPtw8sT"],
+            price: PRICE_MAP["prod_QzwSTkTVrgHIrI"],
             quantity: 1,
           },
         ],
