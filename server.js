@@ -16,7 +16,11 @@ const stripe = new Stripe(process.env.STRIPE_SECRET_KEY, {
 app.use(cors());
 app.use(bodyParser.json());
 
-const FREE_SHIPPING_RATE_ID = "shr_1Q7ehDRtlGIboCBeb7MQYoDp"; // Dummy ID für kostenlosen Versand
+const SHIPPING_RATES = {
+  DE: "shr_1PnyAqRtlGIboCBe0toAlZz2", // Deutschland
+};
+
+const FREE_SHIPPING_RATE_ID = "shr_1Q7ehDRtlGIboCBeb7MQYoDp"; // Kostenloser Versand
 
 const STRIPE_SUPPORTED_COUNTRIES = [
   "AC",
@@ -259,19 +263,41 @@ const STRIPE_SUPPORTED_COUNTRIES = [
 ];
 
 app.post("/create-checkout-session", async (req, res) => {
-  const { products, customerEmail } = req.body;
+  const { products, country, countryCode, customerEmail } = req.body;
+
+  // Validate products
+  if (!products || !Array.isArray(products)) {
+    console.error("Invalid products format");
+    return res.status(400).json({ error: "Invalid products format" });
+  }
+
+  // Validate country and countryCode
+  if (!country || !countryCode) {
+    console.error("Country and country code are required");
+    return res
+      .status(400)
+      .json({ error: "Country and country code are required" });
+  }
+
+  // Check if country code is supported
+  if (!STRIPE_SUPPORTED_COUNTRIES.includes(countryCode)) {
+    console.error(`Country code ${countryCode} is not supported`);
+    return res
+      .status(400)
+      .json({ error: `Country code ${countryCode} is not supported` });
+  }
 
   try {
-    // Kunde erstellen
-    const customer = await stripe.customers.create({
-      email: customerEmail,
-    });
+    console.log("Products:", products);
+    console.log("Country:", country);
+    console.log("Country Code:", countryCode);
 
     const hasSubscriptionStarterKit = products.some(
       (product) => product.id === "prod_QzeKZuNUPtw8sT"
     );
 
     let sessionParams;
+
     if (hasSubscriptionStarterKit) {
       // Preise für das Starterkit und Abo-Produkt abrufen
       const starterKitPrice = (
@@ -282,6 +308,7 @@ app.post("/create-checkout-session", async (req, res) => {
       ).data[0].id;
 
       // Subscription Schedule erstellen
+      const customer = await stripe.customers.create({ email: customerEmail });
       const subscriptionSchedule = await stripe.subscriptionSchedules.create({
         customer: customer.id,
         start_date: "now",
@@ -294,7 +321,7 @@ app.post("/create-checkout-session", async (req, res) => {
                 quantity: 1,
               },
             ],
-            iterations: 1,
+            iterations: 1, // Starterkit wird einmal versendet
           },
           {
             items: [
@@ -303,7 +330,7 @@ app.post("/create-checkout-session", async (req, res) => {
                 quantity: 1,
               },
             ],
-            iterations: 12,
+            iterations: 12, // Ab dem zweiten Monat beginnt das Pulver-Abo
           },
         ],
       });
@@ -331,7 +358,7 @@ app.post("/create-checkout-session", async (req, res) => {
         ],
       };
     } else {
-      // Normaler Checkout für Einzelprodukte
+      // Alte Logik für Einzelprodukte oder nicht-Subscription-Produkte
       const lineItems = await Promise.all(
         products.map(async (product) => {
           const priceId = (await stripe.prices.list({ product: product.id }))
@@ -339,17 +366,34 @@ app.post("/create-checkout-session", async (req, res) => {
           return {
             price: priceId,
             quantity: product.quantity,
+            adjustable_quantity: {
+              enabled: true,
+              minimum: 0,
+              maximum: 999,
+            },
           };
         })
       );
 
+      const mode = products.some(
+        (product) => product.paymentType === "subscription"
+      )
+        ? "subscription"
+        : "payment";
+
       sessionParams = {
         payment_method_types: ["card"],
-        mode: "payment",
+        mode: mode,
         line_items: lineItems,
         success_url: "https://www.empowder.eu/order-complete",
         cancel_url: "https://www.empowder.eu/cancel",
+        allow_promotion_codes: true,
         customer_email: customerEmail,
+        shipping_address_collection: {
+          allowed_countries: Object.keys(SHIPPING_RATES).filter((code) =>
+            STRIPE_SUPPORTED_COUNTRIES.includes(code)
+          ),
+        },
         shipping_options: [
           {
             shipping_rate: FREE_SHIPPING_RATE_ID,
@@ -361,9 +405,7 @@ app.post("/create-checkout-session", async (req, res) => {
     const session = await stripe.checkout.sessions.create(sessionParams);
     res.json({ id: session.id });
   } catch (error) {
-    console.error(
-      `Fehler beim Erstellen der Checkout-Session: ${error.message}`
-    );
+    console.error(`Error creating checkout session: ${error.message}`);
     res.status(500).json({ error: error.message });
   }
 });
