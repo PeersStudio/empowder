@@ -395,8 +395,6 @@ app.post(
       const session = event.data.object;
 
       if (session.client_reference_id) {
-        const subscriptionScheduleId = session.client_reference_id;
-
         try {
           // Erstelle eine Subscription Schedule für den Kunden
           await stripe.subscriptionSchedules.create({
