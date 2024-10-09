@@ -21,6 +21,14 @@ app.use("/webhook", bodyParser.raw({ type: "application/json" }));
 
 const FREE_SHIPPING_RATE_ID = "shr_1Q7weaRtlGIboCBeQzieeslb"; // Kostenloser Versand
 
+// Preis-IDs für die Produkte
+const PRICE_MAP = {
+  prod_QfIkk0NfzHXl3Y: "price_1Pny90RtlGIboCBei4ShyS5V", // Einmalkauf
+  prod_QeOzW9DQaxaFNe: "price_1Pn6BrRtlGIboCBeLcku9Xvt", // Subscription
+  prod_QzwSTkTVrgHIrI: "price_1Q7wZFRtlGIboCBe3GzHk9do", // Starterkit (Einmalkauf)
+  prod_QzwRUGBqnSUkMj: "price_1Q7wYxRtlGIboCBeerp8fgS8",
+};
+
 // Supported countries list
 const STRIPE_SUPPORTED_COUNTRIES = [
   "AC",
@@ -262,14 +270,6 @@ const STRIPE_SUPPORTED_COUNTRIES = [
   "ZZ",
 ];
 
-// Preis-IDs für die Produkte
-const PRICE_MAP = {
-  prod_QfIkk0NfzHXl3Y: "price_1Pny90RtlGIboCBei4ShyS5V", // Einmalkauf
-  prod_QeOzW9DQaxaFNe: "price_1Pn6BrRtlGIboCBeLcku9Xvt", // Subscription
-  prod_QzwSTkTVrgHIrI: "price_1Q7wZFRtlGIboCBe3GzHk9do", // Starterkit (Einmalkauf)
-  prod_QzwRUGBqnSUkMj: "price_1Q7wYxRtlGIboCBeerp8fgS8",
-};
-
 // Endpoint to create checkout session
 app.post("/create-checkout-session", async (req, res) => {
   const { products, country, countryCode, customerEmail } = req.body;
@@ -383,6 +383,7 @@ app.post("/webhook", async (req, res) => {
   let event;
 
   try {
+    // Verwende den rohen Datenstrom für die Signaturprüfung
     event = stripe.webhooks.constructEvent(req.body, sig, endpointSecret);
   } catch (err) {
     console.error(`⚠️  Webhook signature verification failed.`, err.message);
