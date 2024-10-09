@@ -14,10 +14,12 @@ const stripe = new Stripe(process.env.STRIPE_SECRET_KEY, {
 
 // CORS configuration
 app.use(cors());
-app.use(bodyParser.json()); // Verwende JSON-Parser für normale Routen
 
-// Verwende raw bodyParser nur für den Webhook
+// Verwende raw bodyParser NUR für den Webhook
 app.post("/webhook", bodyParser.raw({ type: "application/json" }));
+
+// Verwende JSON-Parser für alle anderen Routen
+app.use(bodyParser.json());
 
 const FREE_SHIPPING_RATE_ID = "shr_1Q7weaRtlGIboCBeQzieeslb"; // Kostenloser Versand
 
