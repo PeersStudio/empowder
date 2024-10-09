@@ -316,21 +316,51 @@ app.post("/create-checkout-session", async (req, res) => {
       (product) => product.id === "prod_QzeKZuNUPtw8sT"
     );
 
-    let sessionParams = {
-      payment_method_types: ["card"],
-      line_items: lineItems,
-      mode: hasStarterKit ? "payment" : "subscription",
-      success_url: "https://www.empowder.eu/order-complete",
-      cancel_url: "https://www.empowder.eu/cancel",
-      customer_email: customerEmail,
-    };
+    let sessionParams;
 
     if (hasStarterKit) {
-      sessionParams.shipping_options = [
-        {
-          shipping_rate: FREE_SHIPPING_RATE_ID,
-        },
-      ];
+      // Erstelle Checkout-Session für das Starterkit als Einmalkauf
+      sessionParams = {
+        payment_method_types: ["card"],
+        mode: "payment",
+        line_items: [
+          {
+            price: PRICE_MAP["prod_QzeKZuNUPtw8sT"],
+            quantity: 1,
+          },
+        ],
+        success_url: "https://www.empowder.eu/order-complete",
+        cancel_url: "https://www.empowder.eu/cancel",
+        customer_email: customerEmail,
+        shipping_options: [
+          {
+            shipping_rate: FREE_SHIPPING_RATE_ID,
+          },
+        ],
+      };
+    } else {
+      // Standard-Checkout-Logik für Einmalkäufe und Subscriptions
+      const hasSubscription = products.some(
+        (product) => product.paymentType === "subscription"
+      );
+      const mode = hasSubscription ? "subscription" : "payment";
+
+      sessionParams = {
+        payment_method_types: ["card"],
+        line_items: lineItems,
+        mode: mode,
+        success_url: "https://www.empowder.eu/order-complete",
+        cancel_url: "https://www.empowder.eu/cancel",
+        customer_email: customerEmail,
+      };
+
+      if (mode === "payment") {
+        sessionParams.shipping_options = [
+          {
+            shipping_rate: FREE_SHIPPING_RATE_ID,
+          },
+        ];
+      }
     }
 
     const session = await stripe.checkout.sessions.create(sessionParams);
@@ -342,66 +372,64 @@ app.post("/create-checkout-session", async (req, res) => {
   }
 });
 
-// Webhook für `checkout.session.completed`
-const endpointSecret = process.env.STRIPE_WEBHOOK_SECRET;
+// Webhook to handle subscription scheduling after successful payment
+app.post(
+  "/webhook",
+  bodyParser.raw({ type: "application/json" }),
+  async (req, res) => {
+    const sig = req.headers["stripe-signature"];
+    let event;
 
-app.post("/webhook", express.raw({ type: "application/json" }), (req, res) => {
-  const sig = req.headers["stripe-signature"];
+    try {
+      event = stripe.webhooks.constructEvent(
+        req.body,
+        sig,
+        process.env.STRIPE_WEBHOOK_SECRET
+      );
+    } catch (err) {
+      console.error(`⚠️  Webhook signature verification failed.`, err.message);
+      return res.status(400).send(`Webhook Error: ${err.message}`);
+    }
 
-  let event;
+    if (event.type === "checkout.session.completed") {
+      const session = event.data.object;
 
-  try {
-    event = stripe.webhooks.constructEvent(req.body, sig, endpointSecret);
-  } catch (err) {
-    console.error(`Webhook signature verification failed: ${err.message}`);
-    return res.status(400).send(`Webhook Error: ${err.message}`);
-  }
+      if (session.client_reference_id) {
+        const subscriptionScheduleId = session.client_reference_id;
 
-  if (event.type === "checkout.session.completed") {
-    const session = event.data.object;
+        try {
+          // Erstelle eine Subscription Schedule für den Kunden
+          await stripe.subscriptionSchedules.create({
+            customer: session.customer,
+            start_date: "now",
+            end_behavior: "release",
+            phases: [
+              {
+                items: [
+                  {
+                    price: PRICE_MAP["prod_QeOzW9DQaxaFNe"],
+                    quantity: 1,
+                  },
+                ],
+                iterations: 12,
+              },
+            ],
+          });
 
-    // Überprüfe, ob die Session ein Starterkit enthält
-    if (
-      session.line_items &&
-      session.line_items.data.some(
-        (item) => item.price.product === "prod_QzeKZuNUPtw8sT"
-      )
-    ) {
-      const customerId = session.customer;
-
-      // Erstelle eine Subscription Schedule für das Pulver, das ab dem zweiten Monat startet
-      stripe.subscriptionSchedules
-        .create({
-          customer: customerId,
-          start_date: "now",
-          end_behavior: "release",
-          phases: [
-            {
-              items: [
-                {
-                  price: PRICE_MAP["prod_QeOzW9DQaxaFNe"], // Preis für die Subscription
-                  quantity: 1,
-                },
-              ],
-              iterations: 12, // Laufzeit des Abonnements
-            },
-          ],
-        })
-        .then((schedule) => {
           console.log(
-            `Subscription schedule created for customer ${customerId}: ${schedule.id}`
+            `Subscription schedule created for customer: ${session.customer}`
           );
-        })
-        .catch((error) => {
+        } catch (error) {
           console.error(
             `Error creating subscription schedule: ${error.message}`
           );
-        });
+        }
+      }
     }
-  }
 
-  res.json({ received: true });
-});
+    res.json({ received: true });
+  }
+);
 
 app.listen(port, () => {
   console.log(`Server running on port ${port}`);
