@@ -344,6 +344,7 @@ app.post("/create-checkout-session", async (req, res) => {
           "https://www.empowder.eu/order-complete",
         cancel_url: "https://www.empowder.eu/",
         customer_email: customerEmail,
+        allow_promotion_codes: true, // Rabattcode-Feld aktivieren
         shipping_options: [
           {
             shipping_rate: FREE_SHIPPING_RATE_ID,
