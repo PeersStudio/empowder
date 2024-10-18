@@ -369,6 +369,7 @@ app.post("/create-checkout-session", async (req, res) => {
         success_url: "https://www.empowder.eu/order-complete",
         cancel_url: "https://www.empowder.eu/",
         customer_email: customerEmail,
+        allow_promotion_codes: true, // Rabattcode-Feld aktivieren
       };
 
       if (mode === "payment") {
