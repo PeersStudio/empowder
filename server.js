@@ -343,8 +343,10 @@ app.post("/create-checkout-session", async (req, res) => {
         success_url: "https://www.empowder.eu/order-complete",
         cancel_url: "https://www.empowder.eu/",
         customer_email: customerEmail,
-        save_payment_method: true, // Zahlungsmethode speichern
         allow_promotion_codes: true, // Rabattcode-Feld aktivieren
+        saved_payment_method_options: {
+          payment_method_save: "enabled", // Zahlungsmethode speichern
+        },
         shipping_options: [
           {
             shipping_rate: FREE_SHIPPING_RATE_ID,
@@ -370,7 +372,9 @@ app.post("/create-checkout-session", async (req, res) => {
         success_url: "https://www.empowder.eu/order-complete",
         cancel_url: "https://www.empowder.eu/",
         customer_email: customerEmail,
-        save_payment_method: true, // Zahlungsmethode speichern
+        saved_payment_method_options: {
+          payment_method_save: "enabled", // Zahlungsmethode speichern
+        },
         allow_promotion_codes: true, // Rabattcode-Feld aktivieren
       };
 
