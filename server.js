@@ -343,6 +343,10 @@ app.post("/create-checkout-session", async (req, res) => {
         success_url: "https://www.empowder.eu/order-complete",
         cancel_url: "https://www.empowder.eu/",
         customer_email: customerEmail,
+        setup_intent_data: {
+          // Zahlungsmethode speichern
+          usage: "off_session",
+        },
         allow_promotion_codes: true, // Rabattcode-Feld aktivieren
         shipping_options: [
           {
@@ -369,6 +373,10 @@ app.post("/create-checkout-session", async (req, res) => {
         success_url: "https://www.empowder.eu/order-complete",
         cancel_url: "https://www.empowder.eu/",
         customer_email: customerEmail,
+        setup_intent_data: {
+          // Zahlungsmethode speichern
+          usage: "off_session",
+        },
         allow_promotion_codes: true, // Rabattcode-Feld aktivieren
       };
 
