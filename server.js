@@ -27,7 +27,7 @@ const FREE_SHIPPING_RATE_ID = "shr_1Q7ehDRtlGIboCBeb7MQYoDp"; // Kostenloser Ver
 const PRICE_MAP = {
   prod_QfIkk0NfzHXl3Y: "price_1Q803tRtlGIboCBe8hal7UCp", // Einmalkauf
   prod_QeOzW9DQaxaFNe: "price_1Pn6BrRtlGIboCBeLcku9Xvt", // Subscription
-  prod_QzwSTkTVrgHIrI: "price_1Q7wZFRtlGIboCBe3GzHk9do", // Starterkit (Einmalkauf)
+  prod_QzeKZuNUPtw8sT: "price_1Q7f1rRtlGIboCBetnmYE1mG", // Starterkit (Einmalkauf)
   prod_QzwRUGBqnSUkMj: "price_1Q7wYxRtlGIboCBeerp8fgS8",
   prod_Qv3UQUqtKyynIk: "price_1Q7zTDRtlGIboCBedcBWpnbO",
   prod_QzeKZuNUPtw8sT: "price_1Q7f1rRtlGIboCBetnmYE1mG",
@@ -318,73 +318,35 @@ app.post("/create-checkout-session", async (req, res) => {
         };
       });
 
-    const hasStarterKit = products.some(
-      (product) => product.id === "prod_QzwSTkTVrgHIrI"
+    const hasSubscription = products.some(
+      (product) => product.paymentType === "subscription"
     );
+    const mode = hasSubscription ? "subscription" : "payment";
 
-    let sessionParams;
+    const sessionParams = {
+      payment_method_types: ["card"],
+      line_items: lineItems,
+      mode: mode,
+      customer_creation: "always",
+      billing_address_collection: "required", // Rechnungsadresse abfragen
+      shipping_address_collection: {
+        allowed_countries: STRIPE_SUPPORTED_COUNTRIES, // Versandadresse abfragen
+      },
+      success_url: "https://www.empowder.eu/order-complete",
+      cancel_url: "https://www.empowder.eu/",
+      customer_email: customerEmail,
+      saved_payment_method_options: {
+        payment_method_save: "enabled", // Zahlungsmethode speichern
+      },
+      allow_promotion_codes: true, // Rabattcode-Feld aktivieren
+    };
 
-    if (hasStarterKit) {
-      // Erstelle Checkout-Session für das Starterkit als Einmalkauf
-      sessionParams = {
-        payment_method_types: ["card"],
-        mode: "payment",
-        line_items: [
-          {
-            price: PRICE_MAP["prod_QzeKZuNUPtw8sT"],
-            quantity: 1,
-          },
-        ],
-        customer_creation: "always",
-        billing_address_collection: "required", // Rechnungsadresse abfragen
-        shipping_address_collection: {
-          allowed_countries: STRIPE_SUPPORTED_COUNTRIES, // Versandadresse abfragen
+    if (mode === "payment") {
+      sessionParams.shipping_options = [
+        {
+          shipping_rate: FREE_SHIPPING_RATE_ID,
         },
-        success_url: "https://www.empowder.eu/order-complete",
-        cancel_url: "https://www.empowder.eu/",
-        customer_email: customerEmail,
-        allow_promotion_codes: true, // Rabattcode-Feld aktivieren
-        saved_payment_method_options: {
-          payment_method_save: "enabled", // Zahlungsmethode speichern
-        },
-        shipping_options: [
-          {
-            shipping_rate: FREE_SHIPPING_RATE_ID,
-          },
-        ],
-      };
-    } else {
-      // Standard-Checkout-Logik für Einmalkäufe und Subscriptions
-      const hasSubscription = products.some(
-        (product) => product.paymentType === "subscription"
-      );
-      const mode = hasSubscription ? "subscription" : "payment";
-
-      sessionParams = {
-        payment_method_types: ["card"],
-        line_items: lineItems,
-        mode: mode,
-        customer_creation: "always",
-        billing_address_collection: "required", // Rechnungsadresse abfragen
-        shipping_address_collection: {
-          allowed_countries: STRIPE_SUPPORTED_COUNTRIES, // Versandadresse abfragen
-        },
-        success_url: "https://www.empowder.eu/order-complete",
-        cancel_url: "https://www.empowder.eu/",
-        customer_email: customerEmail,
-        saved_payment_method_options: {
-          payment_method_save: "enabled", // Zahlungsmethode speichern
-        },
-        allow_promotion_codes: true, // Rabattcode-Feld aktivieren
-      };
-
-      if (mode === "payment") {
-        sessionParams.shipping_options = [
-          {
-            shipping_rate: FREE_SHIPPING_RATE_ID,
-          },
-        ];
-      }
+      ];
     }
 
     const session = await stripe.checkout.sessions.create(sessionParams);
@@ -394,57 +356,6 @@ app.post("/create-checkout-session", async (req, res) => {
     console.error(`Error creating checkout session: ${error.message}`);
     res.status(500).json({ error: error.message });
   }
-});
-
-// Webhook to handle subscription scheduling after successful payment
-app.post("/webhook", async (req, res) => {
-  const sig = req.headers["stripe-signature"];
-  const endpointSecret = process.env.STRIPE_ENDPOINT_SECRET;
-
-  let event;
-
-  try {
-    // Verwende den rohen Datenstrom für die Signaturprüfung
-    event = stripe.webhooks.constructEvent(req.body, sig, endpointSecret);
-  } catch (err) {
-    console.error(`⚠️  Webhook signature verification failed.`, err.message);
-    return res.status(400).send(`Webhook Error: ${err.message}`);
-  }
-
-  if (event.type === "checkout.session.completed") {
-    const session = event.data.object;
-
-    const customerId = session.customer;
-
-    // Erstelle die Subscription Schedule für den zweiten Monat
-    try {
-      const currentDate = Math.floor(Date.now() / 1000); // Aktuelles Datum als UNIX-Timestamp
-      const oneMonthLater = currentDate + 30 * 24 * 60 * 60; // Ein Monat später
-
-      await stripe.subscriptionSchedules.create({
-        customer: customerId,
-        start_date: oneMonthLater, // Startdatum im zweiten Monat
-        end_behavior: "release",
-        phases: [
-          {
-            items: [
-              {
-                price: PRICE_MAP["prod_QeOzW9DQaxaFNe"],
-                quantity: 1,
-              },
-            ],
-            iterations: 12,
-          },
-        ],
-      });
-
-      console.log(`Subscription schedule created for customer: ${customerId}`);
-    } catch (error) {
-      console.error(`Error creating subscription schedule: ${error.message}`);
-    }
-  }
-
-  res.json({ received: true });
 });
 
 app.listen(port, () => {
