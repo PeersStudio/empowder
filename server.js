@@ -340,8 +340,7 @@ app.post("/create-checkout-session", async (req, res) => {
         shipping_address_collection: {
           allowed_countries: STRIPE_SUPPORTED_COUNTRIES, // Versandadresse abfragen
         },
-        success_url:
-          "https://www.empowder.eu/order-complete",
+        success_url: "https://www.empowder.eu/order-complete",
         cancel_url: "https://www.empowder.eu/",
         customer_email: customerEmail,
         allow_promotion_codes: true, // Rabattcode-Feld aktivieren
@@ -413,9 +412,12 @@ app.post("/webhook", async (req, res) => {
 
     // Erstelle die Subscription Schedule für den zweiten Monat
     try {
+      const currentDate = Math.floor(Date.now() / 1000); // Aktuelles Datum als UNIX-Timestamp
+      const oneMonthLater = currentDate + 30 * 24 * 60 * 60; // Ein Monat später
+
       await stripe.subscriptionSchedules.create({
         customer: customerId,
-        start_date: "now",
+        start_date: oneMonthLater, // Startdatum im zweiten Monat
         end_behavior: "release",
         phases: [
           {
@@ -423,6 +425,7 @@ app.post("/webhook", async (req, res) => {
               {
                 price: PRICE_MAP["prod_QeOzW9DQaxaFNe"],
                 quantity: 1,
+                tax_behavior: "inclusive", // Steuer im Preis enthalten
               },
             ],
             iterations: 12,
