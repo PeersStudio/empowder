@@ -8,18 +8,30 @@ const cors = require("cors");
 const app = express();
 const port = process.env.PORT || 3000;
 
-const stripe = new Stripe(
-  process.env.STRIPE_SECRET_KEY,
-  { apiVersion: "2024-06-20" }
-);
+const stripe = new Stripe(process.env.STRIPE_SECRET_KEY, {
+  apiVersion: "2024-06-20",
+});
 
 // CORS configuration
 app.use(cors());
+
+// Verwende raw bodyParser NUR für den Webhook
+app.post("/webhook", bodyParser.raw({ type: "application/json" }));
+
+// Verwende JSON-Parser für alle anderen Routen
 app.use(bodyParser.json());
 
-const SHIPPING_RATES = {
-    DE: "shr_1PnyAqRtlGIboCBe0toAlZz2", // Deutschland
-}
+const FREE_SHIPPING_RATE_ID = "shr_1Q7ehDRtlGIboCBeb7MQYoDp"; // Kostenloser Versand
+
+// Preis-IDs für die Produkte
+const PRICE_MAP = {
+  prod_QfIkk0NfzHXl3Y: "price_1Q803tRtlGIboCBe8hal7UCp", // Einmalkauf
+  prod_QeOzW9DQaxaFNe: "price_1Pn6BrRtlGIboCBeLcku9Xvt", // Subscription
+  prod_QzwSTkTVrgHIrI: "price_1Q7wZFRtlGIboCBe3GzHk9do", // Starterkit (Einmalkauf)
+  prod_QzwRUGBqnSUkMj: "price_1Q7wYxRtlGIboCBeerp8fgS8",
+  prod_Qv3UQUqtKyynIk: "price_1Q7zTDRtlGIboCBedcBWpnbO",
+  prod_QzeKZuNUPtw8sT: "price_1Q7f1rRtlGIboCBetnmYE1mG",
+};
 
 // Supported countries list
 const STRIPE_SUPPORTED_COUNTRIES = [
@@ -264,7 +276,7 @@ const STRIPE_SUPPORTED_COUNTRIES = [
 
 // Endpoint to create checkout session
 app.post("/create-checkout-session", async (req, res) => {
-  const { products, country, countryCode } = req.body;
+  const { products, country, countryCode, customerEmail } = req.body;
 
   // Validate products
   if (!products || !Array.isArray(products)) {
@@ -293,127 +305,141 @@ app.post("/create-checkout-session", async (req, res) => {
     console.log("Country:", country);
     console.log("Country Code:", countryCode);
 
-    const lineItems = await Promise.all(
-      products
-        .filter((product) => product.quantity > 0)
-        .map(async (product) => {
-          console.log(`Fetching prices for product: ${product.id}`);
-          const prices = await stripe.prices.list({ product: product.id });
-          if (!prices.data || prices.data.length === 0) {
-            throw new Error(`No prices found for product ${product.id}`);
-          }
-          let priceId;
-          if (product.paymentType === "subscription") {
-            const [interval_count, interval] = product.frequency.split("_");
-            const singularInterval =
-              parseInt(interval_count) > 1 ? interval.slice(0, -1) : interval;
-            const price = prices.data.find(
-              (price) =>
-                price.recurring &&
-                price.recurring.interval === singularInterval &&
-                price.recurring.interval_count === parseInt(interval_count)
-            );
-            if (!price) {
-              throw new Error(
-                `No matching recurring price found for product ${product.id} with frequency ${product.frequency}`
-              );
-            }
-            priceId = price.id;
-          } else {
-            priceId = prices.data.find((price) => !price.recurring).id;
-          }
-          console.log(`Found price ID for product ${product.id}: ${priceId}`);
+    const lineItems = products
+      .filter((product) => product.quantity > 0)
+      .map((product) => {
+        const priceId = PRICE_MAP[product.id];
+        if (!priceId) {
+          throw new Error(`No price found for product ${product.id}`);
+        }
+        return {
+          price: priceId,
+          quantity: product.quantity,
+        };
+      });
 
-          return {
-            price: priceId,
-            quantity: product.quantity,
-            adjustable_quantity: {
-              enabled: true,
-              minimum: 0,
-              maximum: 999,
-            },
-          };
-        })
+    const hasStarterKit = products.some(
+      (product) => product.id === "prod_QzwSTkTVrgHIrI"
     );
 
-    console.log("Line Items:", lineItems);
+    let sessionParams;
 
-    const hasSubscription = products.some(
-      (product) => product.paymentType === "subscription"
-    );
-    const mode = hasSubscription ? "subscription" : "payment";
-
-    let sessionParams = {
-      payment_method_types: ["card"],
-      line_items: lineItems,
-      mode: mode,
-      success_url: "https://www.empowder.eu/order-complete",
-      cancel_url: "https://www.empowder.eu",
-      allow_promotion_codes: true,
-      shipping_address_collection: {
-        allowed_countries: Object.keys(SHIPPING_RATES).filter((code) =>
-          STRIPE_SUPPORTED_COUNTRIES.includes(code)
-        ),
-      },
-    };
-
-    if (mode === "subscription") {
-      sessionParams.subscription_data = {
-        items: lineItems
-          .filter((item) =>
-            products.find(
-              (product) =>
-                product.id === item.price &&
-                product.paymentType === "subscription"
-            )
-          )
-          .map((item) => ({
-            price: item.price,
-            quantity: item.quantity,
-          })),
-      };
-    }
-
-    if (mode === "payment") {
-      const hasFreeShippingProduct = products.some((p) =>
-        ["prod_Q3ZEOEhS6BKHPB", "prod_Q3Z7kbxV4sI41w"].includes(p.id)
-      );
-      const quantityProd1 = products
-        .filter((p) => p.id === "prod_PyP0RUcPHiIPaT")
-        .reduce((acc, p) => acc + p.quantity, 0);
-      const quantityProd2 = products
-        .filter((p) => p.id === "prod_PyOzSDkacbJWSa")
-        .reduce((acc, p) => acc + p.quantity, 0);
-      const totalQuantity = quantityProd1 + quantityProd2;
-
-      let shippingRate;
-      if (countryCode === "DE" && hasFreeShippingProduct) {
-        // Kostenloser Versand, wenn es ein Produkt mit kostenlosem Versand gibt
-        shippingRate = FREE_SHIPPING_RATE_ID;
-      } else if (countryCode === "DE" && totalQuantity >= 8) {
-        // Kostenloser Versand ab 8 Packungen nur in Deutschland
-        shippingRate = FREE_SHIPPING_RATE_ID;
-      } else {
-        // Standard-Versandrate oder länderspezifische Versandrate
-        shippingRate = SHIPPING_RATES[countryCode] || STANDARD_SHIPPING_RATE_ID;
-      }
-
-      sessionParams.shipping_options = [
-        {
-          shipping_rate: shippingRate,
+    if (hasStarterKit) {
+      // Erstelle Checkout-Session für das Starterkit als Einmalkauf
+      sessionParams = {
+        payment_method_types: ["card"],
+        mode: "payment",
+        line_items: [
+          {
+            price: PRICE_MAP["prod_QzeKZuNUPtw8sT"],
+            quantity: 1,
+          },
+        ],
+        customer_creation: "always",
+        billing_address_collection: "required", // Rechnungsadresse abfragen
+        shipping_address_collection: {
+          allowed_countries: STRIPE_SUPPORTED_COUNTRIES, // Versandadresse abfragen
         },
-      ];
+        success_url: "https://www.empowder.eu/order-complete",
+        cancel_url: "https://www.empowder.eu/",
+        customer_email: customerEmail,
+        allow_promotion_codes: true, // Rabattcode-Feld aktivieren
+        shipping_options: [
+          {
+            shipping_rate: FREE_SHIPPING_RATE_ID,
+          },
+        ],
+      };
+    } else {
+      // Standard-Checkout-Logik für Einmalkäufe und Subscriptions
+      const hasSubscription = products.some(
+        (product) => product.paymentType === "subscription"
+      );
+      const mode = hasSubscription ? "subscription" : "payment";
+
+      sessionParams = {
+        payment_method_types: ["card"],
+        line_items: lineItems,
+        mode: mode,
+        customer_creation: "always",
+        billing_address_collection: "required", // Rechnungsadresse abfragen
+        shipping_address_collection: {
+          allowed_countries: STRIPE_SUPPORTED_COUNTRIES, // Versandadresse abfragen
+        },
+        success_url: "https://www.empowder.eu/order-complete",
+        cancel_url: "https://www.empowder.eu/",
+        customer_email: customerEmail,
+        allow_promotion_codes: true, // Rabattcode-Feld aktivieren
+      };
+
+      if (mode === "payment") {
+        sessionParams.shipping_options = [
+          {
+            shipping_rate: FREE_SHIPPING_RATE_ID,
+          },
+        ];
+      }
     }
 
     const session = await stripe.checkout.sessions.create(sessionParams);
-    console.log(session);
-
     console.log(`Checkout session created: ${session.id}`);
     res.json({ id: session.id });
   } catch (error) {
     console.error(`Error creating checkout session: ${error.message}`);
     res.status(500).json({ error: error.message });
   }
+});
+
+// Webhook to handle subscription scheduling after successful payment
+app.post("/webhook", async (req, res) => {
+  const sig = req.headers["stripe-signature"];
+  const endpointSecret = process.env.STRIPE_ENDPOINT_SECRET;
+
+  let event;
+
+  try {
+    // Verwende den rohen Datenstrom für die Signaturprüfung
+    event = stripe.webhooks.constructEvent(req.body, sig, endpointSecret);
+  } catch (err) {
+    console.error(`⚠️  Webhook signature verification failed.`, err.message);
+    return res.status(400).send(`Webhook Error: ${err.message}`);
+  }
+
+  if (event.type === "checkout.session.completed") {
+    const session = event.data.object;
+
+    const customerId = session.customer;
+
+    // Erstelle die Subscription Schedule für den zweiten Monat
+    try {
+      const currentDate = Math.floor(Date.now() / 1000); // Aktuelles Datum als UNIX-Timestamp
+      const oneMonthLater = currentDate + 30 * 24 * 60 * 60; // Ein Monat später
+
+      await stripe.subscriptionSchedules.create({
+        customer: customerId,
+        start_date: oneMonthLater, // Startdatum im zweiten Monat
+        end_behavior: "release",
+        phases: [
+          {
+            items: [
+              {
+                price: PRICE_MAP["prod_QeOzW9DQaxaFNe"],
+                quantity: 1,
+                tax_behavior: "inclusive", // Steuer im Preis enthalten
+              },
+            ],
+            iterations: 12,
+          },
+        ],
+      });
+
+      console.log(`Subscription schedule created for customer: ${customerId}`);
+    } catch (error) {
+      console.error(`Error creating subscription schedule: ${error.message}`);
+    }
+  }
+
+  res.json({ received: true });
 });
 
 app.listen(port, () => {
