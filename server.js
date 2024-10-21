@@ -318,16 +318,14 @@ app.post("/create-checkout-session", async (req, res) => {
         };
       });
 
+    // Überprüfe, ob eine Subscription vorliegt
     const hasSubscription = products.some(
       (product) => product.paymentType === "subscription"
     );
-    const mode = hasSubscription ? "subscription" : "payment";
 
-    const sessionParams = {
+    let sessionParams = {
       payment_method_types: ["card"],
       line_items: lineItems,
-      mode: mode,
-      customer_creation: "always",
       billing_address_collection: "required", // Rechnungsadresse abfragen
       shipping_address_collection: {
         allowed_countries: STRIPE_SUPPORTED_COUNTRIES, // Versandadresse abfragen
@@ -341,7 +339,12 @@ app.post("/create-checkout-session", async (req, res) => {
       allow_promotion_codes: true, // Rabattcode-Feld aktivieren
     };
 
-    if (mode === "payment") {
+    // Für Subscription wird der Modus auf 'subscription' gesetzt, für Einmalkäufe auf 'payment'
+    sessionParams.mode = hasSubscription ? "subscription" : "payment";
+
+    // Nur für den Einmalkauf-Modus den customer_creation Parameter verwenden
+    if (!hasSubscription) {
+      sessionParams.customer_creation = "always";
       sessionParams.shipping_options = [
         {
           shipping_rate: FREE_SHIPPING_RATE_ID,
