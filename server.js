@@ -425,7 +425,6 @@ app.post("/webhook", async (req, res) => {
               {
                 price: PRICE_MAP["prod_QeOzW9DQaxaFNe"],
                 quantity: 1,
-                tax_behavior: "inclusive", // Steuer im Preis enthalten
               },
             ],
             iterations: 12,
