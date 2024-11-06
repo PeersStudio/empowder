@@ -335,17 +335,17 @@ app.post("/create-checkout-session", async (req, res) => {
           key: "newsletter_subscription",
           label: {
             type: "custom",
-            custom: "Möchten Sie den Newsletter abonnieren?",
+            custom: "Would you like to subscribe to the newsletter?",
           },
           type: "dropdown",
           dropdown: {
             options: [
               {
-                label: "Ja",
+                label: "Yes",
                 value: "accepted",
               },
               {
-                label: "Nein",
+                label: "No",
                 value: "declined",
               },
             ],
