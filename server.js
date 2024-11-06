@@ -326,12 +326,8 @@ app.post("/create-checkout-session", async (req, res) => {
     let sessionParams = {
       payment_method_types: [
         "card",
-        "ideal",
-        "sepa_debit",
-        "sofort",
         "giropay",
         "paypal",
-        "afterpay_clearpay",
         "bancontact",
       ],
       line_items: lineItems,
