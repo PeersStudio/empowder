@@ -324,12 +324,44 @@ app.post("/create-checkout-session", async (req, res) => {
     );
 
     let sessionParams = {
-      payment_method_types: ["card"],
+      payment_method_types: [
+        "card",
+        "ideal",
+        "sepa_debit",
+        "sofort",
+        "giropay",
+        "paypal",
+        "afterpay_clearpay",
+        "bancontact",
+      ],
       line_items: lineItems,
       billing_address_collection: "required", // Rechnungsadresse abfragen
       shipping_address_collection: {
         allowed_countries: STRIPE_SUPPORTED_COUNTRIES, // Versandadresse abfragen
       },
+      custom_fields: [
+        {
+          key: "newsletter_subscription",
+          label: {
+            type: "custom",
+            custom: "Möchten Sie den Newsletter abonnieren?",
+          },
+          type: "dropdown",
+          dropdown: {
+            options: [
+              {
+                label: "Ja",
+                value: "accepted",
+              },
+              {
+                label: "Nein",
+                value: "declined",
+              },
+            ],
+            default_value: "accepted", // Standardmäßig auf "Ja" gesetzt
+          },
+        },
+      ],
       success_url: "https://www.empowder.eu/order-complete",
       cancel_url: "https://www.empowder.eu/",
       customer_email: customerEmail,
