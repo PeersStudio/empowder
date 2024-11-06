@@ -324,12 +324,7 @@ app.post("/create-checkout-session", async (req, res) => {
     );
 
     let sessionParams = {
-      payment_method_types: [
-        "card",
-        "giropay",
-        "paypal",
-        "bancontact",
-      ],
+      payment_method_types: ["card", "giropay", "paypal", "bancontact"],
       line_items: lineItems,
       billing_address_collection: "required", // Rechnungsadresse abfragen
       shipping_address_collection: {
@@ -358,6 +353,9 @@ app.post("/create-checkout-session", async (req, res) => {
           },
         },
       ],
+      tax_id_collection: {
+        enabled: true,
+      },
       success_url: "https://www.empowder.eu/order-complete",
       cancel_url: "https://www.empowder.eu/",
       customer_email: customerEmail,
