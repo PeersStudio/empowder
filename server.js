@@ -324,7 +324,7 @@ app.post("/create-checkout-session", async (req, res) => {
     );
 
     let sessionParams = {
-      payment_method_types: ["card", "giropay", "paypal", "bancontact"],
+      payment_method_types: ["card", "paypal", "bancontact"],
       line_items: lineItems,
       billing_address_collection: "required", // Rechnungsadresse abfragen
       shipping_address_collection: {
