@@ -325,7 +325,7 @@ app.post("/create-checkout-session", async (req, res) => {
 
     let sessionParams = {
       payment_method_types: hasSubscription
-        ? ["card", "paypal"] // Bei Abonnement nur Kreditkarte und PayPal
+        ? ["card"] // Bei Abonnement nur Kreditkarte und PayPal
         : ["card", "paypal", "bancontact", "giropay"], // Bei Einmalkauf auch Bancontact verfügbar
       line_items: lineItems,
       billing_address_collection: "required", // Rechnungsadresse abfragen
